@@ -135,7 +135,7 @@ defmodule Mix.Tasks.MobPush.Install do
 
   # ── Config generation ─────────────────────────────────────────────────────
 
-  defp append_config(runtime_exs, apns_cfg, fcm_cfg, shell, opts \\ []) do
+  defp append_config(runtime_exs, apns_cfg, fcm_cfg, shell, opts) do
     block = config_block(apns_cfg, fcm_cfg)
 
     if File.exists?(runtime_exs) do

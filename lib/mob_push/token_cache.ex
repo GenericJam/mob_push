@@ -20,13 +20,18 @@ defmodule MobPush.TokenCache do
   end
 
   @doc "Fetch a cached token, or call `fetch_fn/0` to produce a fresh one."
-  @spec get(key :: term(), fetch_fn :: (-> {:ok, {String.t(), expires_at :: integer()}} | {:error, term()})) ::
+  @spec get(
+          key :: term(),
+          fetch_fn :: (-> {:ok, {String.t(), expires_at :: integer()}} | {:error, term()})
+        ) ::
           {:ok, String.t()} | {:error, term()}
   def get(key, fetch_fn) do
     now = System.system_time(:second)
+
     case :ets.lookup(@table, key) do
       [{^key, token, expires_at}] when expires_at - @refresh_margin_s > now ->
         {:ok, token}
+
       _ ->
         GenServer.call(__MODULE__, {:refresh, key, fetch_fn}, 15_000)
     end
@@ -51,14 +56,17 @@ defmodule MobPush.TokenCache do
   def handle_call({:refresh, key, fetch_fn}, _from, state) do
     # Double-check under the lock — another caller may have refreshed already.
     now = System.system_time(:second)
+
     case :ets.lookup(@table, key) do
       [{^key, token, expires_at}] when expires_at - @refresh_margin_s > now ->
         {:reply, {:ok, token}, state}
+
       _ ->
         case fetch_fn.() do
           {:ok, {token, expires_at}} ->
             :ets.insert(@table, {key, token, expires_at})
             {:reply, {:ok, token}, state}
+
           {:error, _} = err ->
             {:reply, err, state}
         end

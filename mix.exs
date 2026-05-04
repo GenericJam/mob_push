@@ -13,7 +13,7 @@ defmodule MobPush.MixProject do
       deps: deps(),
       description: "Server-side push notifications for Mob apps — APNs (iOS) and FCM (Android)",
       package: package(),
-      docs: docs(),
+      docs: docs()
     ]
   end
 
@@ -26,17 +26,17 @@ defmodule MobPush.MixProject do
 
   defp deps do
     [
-      {:req,   "~> 0.5"},
-      {:jose,  "~> 1.11"},
+      {:req, "~> 0.5"},
+      {:jose, "~> 1.11"},
       {:jason, "~> 1.4"},
-      {:ex_doc, "~> 0.34", only: :dev, runtime: false},
+      {:ex_doc, "~> 0.34", only: :dev, runtime: false}
     ]
   end
 
   defp package do
     [
       licenses: ["MIT"],
-      links: %{"GitHub" => @source_url},
+      links: %{"GitHub" => @source_url}
     ]
   end
 
@@ -46,13 +46,13 @@ defmodule MobPush.MixProject do
       source_url: @source_url,
       source_url_pattern: "#{@source_url}/blob/main/%{path}#L%{line}",
       extras: [
-        "README.md": [title: "mob_push"],
+        "README.md": [title: "mob_push"]
       ],
       groups_for_modules: [
-        "API": [MobPush],
-        "Internals": [MobPush.APNS, MobPush.FCM, MobPush.TokenCache],
-        "Mix Tasks": ~r/Mix\.Tasks\./,
-      ],
+        API: [MobPush],
+        Internals: [MobPush.APNS, MobPush.FCM, MobPush.TokenCache],
+        "Mix Tasks": ~r/Mix\.Tasks\./
+      ]
     ]
   end
 end

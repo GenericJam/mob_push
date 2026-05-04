@@ -12,7 +12,7 @@ defmodule MobPush.APNSTest do
       parts = String.split(token, ".")
       assert length(parts) == 3
 
-      header  = parts |> hd()  |> Base.url_decode64!(padding: false) |> Jason.decode!()
+      header = parts |> hd() |> Base.url_decode64!(padding: false) |> Jason.decode!()
       payload = parts |> Enum.at(1) |> Base.url_decode64!(padding: false) |> Jason.decode!()
 
       assert header["alg"] == "ES256"
@@ -33,7 +33,7 @@ defmodule MobPush.APNSTest do
       decoded = Jason.decode!(json)
 
       assert decoded["aps"]["alert"]["title"] == "Hello"
-      assert decoded["aps"]["alert"]["body"]  == "World"
+      assert decoded["aps"]["alert"]["body"] == "World"
       assert decoded["screen"] == "home"
     end
 
@@ -55,10 +55,31 @@ defmodule MobPush.APNSTest do
 
   describe "config" do
     test "missing key config returns error" do
-      Application.put_env(:mob_push, :apns, [key_id: "X", team_id: "Y", bundle_id: "z"])
+      Application.put_env(:mob_push, :apns, key_id: "X", team_id: "Y", bundle_id: "z")
       MobPush.TokenCache.evict({:apns_jwt, "X"})
+
       try do
         assert {:error, :missing_apns_key_config} =
+                 APNS.send("token", %{title: "Hi", body: "World"})
+      after
+        Application.delete_env(:mob_push, :apns)
+      end
+    end
+
+    test "unreadable key file returns a tagged error tuple (no crash)" do
+      bogus = "/tmp/mob_push_does_not_exist_#{System.unique_integer([:positive])}.p8"
+
+      Application.put_env(:mob_push, :apns,
+        key_id: "X2",
+        team_id: "Y",
+        bundle_id: "z",
+        key_file: bogus
+      )
+
+      MobPush.TokenCache.evict({:apns_jwt, "X2"})
+
+      try do
+        assert {:error, {:apns_key_file_unreadable, ^bogus, _reason}} =
                  APNS.send("token", %{title: "Hi", body: "World"})
       after
         Application.delete_env(:mob_push, :apns)
@@ -75,6 +96,7 @@ defmodule MobPush.APNSTest do
     now = System.system_time(:second)
     header = %{"alg" => "ES256", "kid" => key_id}
     claims = %{"iss" => team_id, "iat" => now}
+
     try do
       jwk = JOSE.JWK.from_pem(pem)
       {_, token} = JOSE.JWS.compact(JOSE.JWT.sign(jwk, header, claims))
@@ -86,16 +108,21 @@ defmodule MobPush.APNSTest do
 
   defp build_aps(%{title: title, body: body} = payload) do
     aps = %{"alert" => %{"title" => title, "body" => body}}
-    aps = if Map.get(payload, :badge),             do: Map.put(aps, "badge", payload.badge),   else: aps
-    aps = if Map.get(payload, :sound),             do: Map.put(aps, "sound", payload.sound),   else: aps
-    aps = if Map.get(payload, :content_available), do: Map.put(aps, "content-available", 1),   else: aps
+    aps = if Map.get(payload, :badge), do: Map.put(aps, "badge", payload.badge), else: aps
+    aps = if Map.get(payload, :sound), do: Map.put(aps, "sound", payload.sound), else: aps
+
+    aps =
+      if Map.get(payload, :content_available), do: Map.put(aps, "content-available", 1), else: aps
 
     root = %{"aps" => aps}
-    root = if data = Map.get(payload, :data) do
-      Map.merge(root, Map.new(data, fn {k, v} -> {to_string(k), v} end))
-    else
-      root
-    end
+
+    root =
+      if data = Map.get(payload, :data) do
+        Map.merge(root, Map.new(data, fn {k, v} -> {to_string(k), v} end))
+      else
+        root
+      end
+
     Jason.encode!(root)
   end
 

@@ -42,7 +42,7 @@ defmodule Mix.Tasks.MobPush.Install do
   @switches [ios_only: :boolean, android_only: :boolean, skip_all: :boolean]
 
   @apns_docs_url "https://developer.apple.com/account/resources/authkeys/list"
-  @fcm_docs_url  "https://console.firebase.google.com"
+  @fcm_docs_url "https://console.firebase.google.com"
 
   @impl Mix.Task
   def run(argv) do
@@ -79,7 +79,7 @@ defmodule Mix.Tasks.MobPush.Install do
       shell.info("\nSkipping both platforms — writing placeholder config.\n")
     end
 
-    append_config(runtime_exs, apns_cfg, fcm_cfg, shell)
+    append_config(runtime_exs, apns_cfg, fcm_cfg, shell, ios_only: !!opts[:ios_only])
   end
 
   # ── APNs prompts ──────────────────────────────────────────────────────────
@@ -91,11 +91,11 @@ defmodule Mix.Tasks.MobPush.Install do
 
     if shell.yes?("Configure APNs now?") do
       %{
-        key_id:    prompt_value(shell, "Key ID (10 chars, from the portal)"),
-        team_id:   prompt_value(shell, "Team ID (10 chars, from Membership Details)"),
+        key_id: prompt_value(shell, "Key ID (10 chars, from the portal)"),
+        team_id: prompt_value(shell, "Team ID (10 chars, from Membership Details)"),
         bundle_id: prompt_value(shell, "Bundle ID (e.g. com.example.myapp)"),
-        key_file:  prompt_value(shell, "Path to .p8 key file (e.g. /run/secrets/AuthKey_XXX.p8)"),
-        env:       prompt_env(shell),
+        key_file: prompt_value(shell, "Path to .p8 key file (e.g. /run/secrets/AuthKey_XXX.p8)"),
+        env: prompt_env(shell)
       }
     else
       shell.info("  → Skipping APNs. Placeholder config will be inserted.\n")
@@ -105,10 +105,13 @@ defmodule Mix.Tasks.MobPush.Install do
 
   defp prompt_env(shell) do
     shell.info("")
-    env_input = shell.prompt("  APNs environment — sandbox or production? [sandbox]: ") |> String.trim()
+
+    env_input =
+      shell.prompt("  APNs environment — sandbox or production? [sandbox]: ") |> String.trim()
+
     case env_input do
       "production" -> :production
-      _            -> :sandbox
+      _ -> :sandbox
     end
   end
 
@@ -121,8 +124,8 @@ defmodule Mix.Tasks.MobPush.Install do
 
     if shell.yes?("Configure FCM now?") do
       %{
-        project_id:          prompt_value(shell, "Firebase Project ID"),
-        service_account_key: prompt_value(shell, "Path to service account JSON file"),
+        project_id: prompt_value(shell, "Firebase Project ID"),
+        service_account_key: prompt_value(shell, "Path to service account JSON file")
       }
     else
       shell.info("  → Skipping FCM. Placeholder config will be inserted.\n")
@@ -132,20 +135,26 @@ defmodule Mix.Tasks.MobPush.Install do
 
   # ── Config generation ─────────────────────────────────────────────────────
 
-  defp append_config(runtime_exs, apns_cfg, fcm_cfg, shell) do
+  defp append_config(runtime_exs, apns_cfg, fcm_cfg, shell, opts \\ []) do
     block = config_block(apns_cfg, fcm_cfg)
 
     if File.exists?(runtime_exs) do
       existing = File.read!(runtime_exs)
+
       if String.contains?(existing, "mob_push") do
-        shell.info([:yellow, "\n⚠ #{runtime_exs} already contains mob_push config — skipping write.", :reset])
+        shell.info([
+          :yellow,
+          "\n⚠ #{runtime_exs} already contains mob_push config — skipping write.",
+          :reset
+        ])
+
         shell.info("  Edit it manually if needed.")
-        return_next_steps(shell, apns_cfg, fcm_cfg)
+        return_next_steps(shell, apns_cfg, fcm_cfg, opts)
         :ok
       else
         File.write!(runtime_exs, existing <> "\n" <> block)
         shell.info([:green, "\n✓ Appended mob_push config to #{runtime_exs}", :reset])
-        return_next_steps(shell, apns_cfg, fcm_cfg)
+        return_next_steps(shell, apns_cfg, fcm_cfg, opts)
       end
     else
       File.write!(runtime_exs, "import Config\n\n" <> block)
@@ -173,11 +182,19 @@ defmodule Mix.Tasks.MobPush.Install do
     """
   end
 
-  defp apns_block(%{key_id: key_id, team_id: team_id, bundle_id: bundle_id, key_file: key_file, env: env}) do
-    env_expr = case env do
-      :production -> "if(config_env() == :prod, do: :production, else: :sandbox)"
-      :sandbox    -> ":sandbox"
-    end
+  defp apns_block(%{
+         key_id: key_id,
+         team_id: team_id,
+         bundle_id: bundle_id,
+         key_file: key_file,
+         env: env
+       }) do
+    env_expr =
+      case env do
+        :production -> "if(config_env() == :prod, do: :production, else: :sandbox)"
+        :sandbox -> ":sandbox"
+      end
+
     """
     # iOS push notifications (APNs)
     config :mob_push, :apns,
@@ -210,7 +227,7 @@ defmodule Mix.Tasks.MobPush.Install do
 
   # ── Next steps ────────────────────────────────────────────────────────────
 
-  defp return_next_steps(shell, apns_cfg, fcm_cfg) do
+  defp return_next_steps(shell, apns_cfg, fcm_cfg, opts \\ []) do
     shell.info("""
 
     Next steps:
@@ -230,6 +247,15 @@ defmodule Mix.Tasks.MobPush.Install do
         Android (FCM) — fill in config/runtime.exs when you have your credentials:
           • Firebase project + service account JSON: #{@fcm_docs_url}
             Project Settings → Service Accounts → Generate new private key
+      """)
+    end
+
+    unless Keyword.get(opts, :ios_only, false) do
+      shell.info("""
+        Android — add google-services.json to your project:
+          • In Firebase console → Project Settings → Your apps → Download google-services.json
+          • Place it at android/app/google-services.json in your Mob project
+          • The Android build will fail without this file
       """)
     end
 

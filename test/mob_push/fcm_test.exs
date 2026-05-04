@@ -7,16 +7,35 @@ defmodule MobPush.FCMTest do
 
   alias MobPush.FCM
 
-  test "returns error when config is missing" do
+  test "returns error tuple when config is missing" do
+    # No-raise convention: missing config returns an error tuple instead of
+    # crashing the calling process. Token cache stays sane and the caller
+    # can surface a useful message.
     original = Application.get_env(:mob_push, :fcm)
     Application.delete_env(:mob_push, :fcm)
+
     try do
-      # service_account/1 will raise if neither key is set
-      assert_raise RuntimeError, ~r/service_account_key/, fn ->
-        FCM.send("token", %{title: "Hi", body: "World"})
-      end
+      assert {:error, :missing_fcm_service_account_config} =
+               FCM.send("token", %{title: "Hi", body: "World"})
     after
       if original, do: Application.put_env(:mob_push, :fcm, original)
+    end
+  end
+
+  test "unreadable service account file returns a tagged error tuple (no crash)" do
+    bogus = "/tmp/mob_push_fcm_does_not_exist_#{System.unique_integer([:positive])}.json"
+    original = Application.get_env(:mob_push, :fcm)
+    Application.put_env(:mob_push, :fcm, project_id: "p", service_account_key: bogus)
+
+    try do
+      assert {:error, {:fcm_service_account_unreadable, ^bogus, _reason}} =
+               FCM.send("token", %{title: "Hi", body: "World"})
+    after
+      if original do
+        Application.put_env(:mob_push, :fcm, original)
+      else
+        Application.delete_env(:mob_push, :fcm)
+      end
     end
   end
 
@@ -29,9 +48,10 @@ defmodule MobPush.FCMTest do
 
     assert decoded["message"]["token"] == "tok"
     assert decoded["message"]["notification"]["title"] == "Hello"
-    assert decoded["message"]["notification"]["body"]  == "World"
+    assert decoded["message"]["notification"]["body"] == "World"
     assert decoded["message"]["data"]["screen"] == "home"
-    assert decoded["message"]["data"]["id"]     == "42"   # stringified
+    # stringified
+    assert decoded["message"]["data"]["id"] == "42"
   end
 
   # ── Helpers ────────────────────────────────────────────────────────────────
@@ -41,11 +61,14 @@ defmodule MobPush.FCMTest do
   defp build_message(token, %{title: title, body: body} = payload) do
     notification = %{"title" => title, "body" => body}
     message = %{"token" => token, "notification" => notification}
-    message = if data = Map.get(payload, :data) do
-      Map.put(message, "data", Map.new(data, fn {k, v} -> {to_string(k), to_string(v)} end))
-    else
-      message
-    end
+
+    message =
+      if data = Map.get(payload, :data) do
+        Map.put(message, "data", Map.new(data, fn {k, v} -> {to_string(k), to_string(v)} end))
+      else
+        message
+      end
+
     Jason.encode!(%{"message" => message})
   end
 end

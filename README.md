@@ -118,6 +118,19 @@ The FCM HTTP v1 API must be enabled on your Google Cloud project (it usually is 
 
 Official docs: [Firebase Cloud Messaging HTTP v1 API](https://firebase.google.com/docs/reference/fcm/rest/v1/projects.messages/send)
 
+**5. Add `google-services.json` to your Android project**
+
+The Firebase SDK requires a `google-services.json` config file in your Android app directory. Without it the Android build will fail.
+
+- In the Firebase console, click the gear icon → **Project Settings**
+- Under **Your apps**, select your Android app (or click **Add app → Android** if you haven't registered it yet)
+- Click **Download google-services.json**
+- Place the file at `android/app/google-services.json` in your Mob project
+
+This file is not a secret (it contains only project identifiers, not credentials), but it is typically kept out of source control if you are working in a public repository.
+
+Official docs: [Add Firebase to your Android project](https://firebase.google.com/docs/android/setup)
+
 ---
 
 ## Configuration

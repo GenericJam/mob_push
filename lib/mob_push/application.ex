@@ -7,7 +7,7 @@ defmodule MobPush.Application do
   def start(_type, _args) do
     children = [
       {Finch, name: MobPush.Finch, pools: finch_pools()},
-      MobPush.TokenCache,
+      MobPush.TokenCache
     ]
 
     Supervisor.start_link(children, strategy: :one_for_one, name: MobPush.Supervisor)
@@ -17,8 +17,8 @@ defmodule MobPush.Application do
   # so connections are reused across calls. FCM uses HTTP/1.1 (default).
   defp finch_pools do
     %{
-      "https://api.push.apple.com"         => [protocols: [:http2], count: 2, size: 10],
-      "https://api.sandbox.push.apple.com" => [protocols: [:http2], count: 2, size: 10],
+      "https://api.push.apple.com" => [protocols: [:http2], count: 2, size: 10],
+      "https://api.sandbox.push.apple.com" => [protocols: [:http2], count: 2, size: 10]
     }
   end
 end

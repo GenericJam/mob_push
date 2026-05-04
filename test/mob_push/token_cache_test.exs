@@ -11,6 +11,7 @@ defmodule MobPush.TokenCacheTest do
 
   test "calls fetch_fn on cache miss and caches result" do
     counter = :counters.new(1, [])
+
     fetch_fn = fn ->
       :counters.add(counter, 1, 1)
       {:ok, {"test_token", far_future()}}
@@ -28,10 +29,12 @@ defmodule MobPush.TokenCacheTest do
     TokenCache.evict(:test_key)
     # Now it should call fetch_fn again
     counter = :counters.new(1, [])
+
     fetch_fn2 = fn ->
       :counters.add(counter, 1, 1)
       {:ok, {"tok2", far_future()}}
     end
+
     assert {:ok, "tok2"} = TokenCache.get(:test_key, fetch_fn2)
     assert :counters.get(counter, 1) == 1
   end

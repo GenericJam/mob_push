@@ -51,6 +51,13 @@ defmodule MobPush.APNSTest do
 
       assert decoded["aps"]["content-available"] == 1
     end
+
+    test "build_aps includes subtitle when given" do
+      json = build_aps(%{title: "Hi", body: "Bye", subtitle: "From Kevin"})
+      decoded = Jason.decode!(json)
+
+      assert decoded["aps"]["alert"]["subtitle"] == "From Kevin"
+    end
   end
 
   describe "config" do
@@ -107,7 +114,9 @@ defmodule MobPush.APNSTest do
   end
 
   defp build_aps(%{title: title, body: body} = payload) do
-    aps = %{"alert" => %{"title" => title, "body" => body}}
+    alert = %{"title" => title, "body" => body}
+    alert = if Map.get(payload, :subtitle), do: Map.put(alert, "subtitle", payload.subtitle), else: alert
+    aps = %{"alert" => alert}
     aps = if Map.get(payload, :badge), do: Map.put(aps, "badge", payload.badge), else: aps
     aps = if Map.get(payload, :sound), do: Map.put(aps, "sound", payload.sound), else: aps
 

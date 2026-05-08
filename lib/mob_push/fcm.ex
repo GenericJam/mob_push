@@ -137,18 +137,29 @@ defmodule MobPush.FCM do
 
   defp build_message(device_token, %{title: title, body: body} = payload) do
     notification = %{"title" => title, "body" => body}
+    data = Map.get(payload, :data, %{})
+
+    # mob_notification_json lets MainActivity reconstruct the notification when
+    # the user taps it from the system tray (background/killed state).
+    # MobFirebaseService.onMessageReceived uses it for foreground delivery.
+    mob_json =
+      Jason.encode!(%{
+        "title" => title,
+        "body" => body,
+        "source" => "push",
+        "data" => Map.new(data, fn {k, v} -> {to_string(k), to_string(v)} end)
+      })
+
+    android_data =
+      data
+      |> stringify_keys()
+      |> Map.put("mob_notification_json", mob_json)
 
     message = %{
       "token" => device_token,
-      "notification" => notification
+      "notification" => notification,
+      "data" => android_data
     }
-
-    message =
-      if data = Map.get(payload, :data) do
-        Map.put(message, "data", stringify_keys(data))
-      else
-        message
-      end
 
     # Android-specific options
     message =

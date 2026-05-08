@@ -46,7 +46,8 @@ defmodule MobPush.MixProject do
       source_url: @source_url,
       source_url_pattern: "#{@source_url}/blob/main/%{path}#L%{line}",
       extras: [
-        "README.md": [title: "mob_push"]
+        "README.md": [title: "Overview"],
+        "plan.md": [title: "Roadmap"]
       ],
       groups_for_modules: [
         API: [MobPush],

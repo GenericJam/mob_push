@@ -3,23 +3,52 @@ defmodule MobPush.APNS do
   APNs HTTP/2 adapter for MobPush.
 
   Sends push notifications to iOS devices via Apple Push Notification service
-  using token-based auth (p8 key) over HTTP/2.
+  using token-based auth (p8 key) over HTTP/2. Called internally by
+  `MobPush.send/3` — you can also call it directly for advanced use cases.
 
   ## Configuration
 
       config :mob_push, :apns,
-        key_id:    "XXXXXXXXXX",   # 10-char Key ID from Apple Developer portal
-        team_id:   "XXXXXXXXXX",   # 10-char Team ID from Apple Developer portal
-        key_file:  "/path/to/AuthKey_XXXXXXXXXX.p8",  # path on disk
-        # OR: key_pem: "-----BEGIN PRIVATE KEY-----\\n..."
-        bundle_id: "com.example.myapp",
-        env:       :sandbox   # :sandbox | :production (default: :sandbox)
+        key_id:    "XXXXXXXXXX",           # 10-char Key ID from the Apple Developer portal Keys page
+        team_id:   "XXXXXXXXXX",           # 10-char Team ID from Membership Details
+        bundle_id: "com.example.myapp",    # must match the app's bundle ID exactly
+        key_file:  "/path/to/AuthKey_XXXXXXXXXX.p8",  # path to the .p8 file on disk
+        # OR: key_pem: "-----BEGIN PRIVATE KEY-----\\n..."  # PEM string (from secret manager, etc.)
+        env:       :sandbox                # :sandbox | :production (default: :sandbox)
+
+  **Sandbox vs production:** These are completely separate APNs endpoints with
+  separate device token namespaces. A sandbox token sent to the production
+  endpoint returns `"BadDeviceToken"`. Use `:sandbox` for Xcode/TestFlight dev
+  builds and `:production` for App Store / TestFlight production builds.
+
+  ## Payload options
+
+  | Key                  | Type    | Description |
+  |----------------------|---------|-------------|
+  | `:title`             | string  | Bold title line (required) |
+  | `:body`              | string  | Main text (required) |
+  | `:subtitle`          | string  | Second line under the title, shown in lighter weight |
+  | `:badge`             | integer | Badge count on the app icon; pass `0` to clear |
+  | `:sound`             | string  | `"default"` for system sound; or a filename (no extension) bundled in the app. Files must be `.aiff`, `.wav`, or `.caf` and under 30 seconds. |
+  | `:content_available` | boolean | Silent push — wakes the app in the background without showing any alert. The app has ~30 seconds of background time. |
+  | `:data`              | map     | Arbitrary key-value pairs merged into the APNs root payload. Keys are stringified; values are passed through as-is (can be nested). |
+
+  ## Authentication
+
+  Uses ES256 JWT tokens signed with the `.p8` key. Tokens are valid for 1 hour;
+  `MobPush.TokenCache` refreshes them 5 minutes early. On a 403 response, the
+  token is evicted and a fresh one is fetched on the next call.
 
   ## Usage
 
-  Called internally by `MobPush.send/3`. You can also call it directly:
-
-      MobPush.APNS.send("device_token_hex", %{title: "Hi", body: "Hello", data: %{}})
+      MobPush.APNS.send("device_token_hex", %{
+        title:    "New message",
+        subtitle: "From Alice",
+        body:     "Hey, are you free tonight?",
+        badge:    3,
+        sound:    "default",
+        data:     %{screen: "chat", thread_id: "42"}
+      })
   """
 
   require Logger

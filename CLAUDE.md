@@ -21,7 +21,7 @@ that's left to the application.
 mix test
 ```
 
-All 14 tests are pure unit tests — no network calls, no credentials needed.
+All 17 tests are pure unit tests — no network calls, no credentials needed.
 
 ## Adding tests
 
@@ -36,10 +36,14 @@ jwk = JOSE.JWK.generate_key({:ec, "P-256"})
 Do NOT use `:public_key.generate_key/1` — it has OTP-version quirks with EC keys.
 Do NOT use `{:namedCurve, :prime256v1}` — use the OID tuple `{1, 2, 840, 10045, 3, 1, 7}`.
 
+The test file for `apns.ex` contains a private `build_aps/1` helper that mirrors
+the private function in the module. When you add new fields to `build_aps/1` in
+`apns.ex`, update the mirror in the test file too.
+
 ## Token cache behaviour
 
 - APNs JWTs: cached 50 minutes (Apple allows up to 1 hour)
-- FCM tokens: cached ~58 minutes (expire after 1 hour; margin of 5 min)
+- FCM OAuth2 tokens: cached ~55 minutes (expire after 1 hour; 5-minute margin)
 - Cache key for APNs: `{:apns_jwt, key_id}`
 - Cache key for FCM: `{:fcm_token, client_email}`
 - On 401/403: caller evicts the cache key and returns `{:error, :auth_failed}`
@@ -65,14 +69,87 @@ FCM uses HTTP/1.1 (Finch default). All HTTP goes through `MobPush.Finch`.
 
 ```elixir
 config :mob_push, :apns,
-  key_id: "...", team_id: "...", bundle_id: "...",
-  key_file: "/path/to/AuthKey.p8",  # OR key_pem: "..."
-  env: :sandbox  # or :production
+  key_id:    "XXXXXXXXXX",          # 10-char Key ID
+  team_id:   "XXXXXXXXXX",          # 10-char Team ID
+  bundle_id: "com.example.myapp",
+  key_file:  "/path/to/AuthKey.p8", # OR key_pem: "..."
+  env:       :sandbox               # or :production
 
 config :mob_push, :fcm,
-  project_id: "...",
-  service_account_key: "/path/to/sa.json"  # OR service_account_json: %{...}
+  project_id:          "my-firebase-project",
+  service_account_key: "/path/to/sa.json"   # OR service_account_json: %{...}
 ```
+
+## Payload options
+
+### iOS (APNs) — `build_aps/1` in `apns.ex`
+
+| Key | Type | Notes |
+|-----|------|-------|
+| `:title` | string | Required |
+| `:body` | string | Required |
+| `:subtitle` | string | Second line under title in the tray |
+| `:badge` | integer | App icon badge count; 0 to clear |
+| `:sound` | string | `"default"` or bundled filename (no extension) |
+| `:content_available` | boolean | Silent push — maps to `"content-available": 1` |
+| `:data` | map | Merged into the APNs root (outside `aps`); values preserved as-is |
+
+### Android (FCM) — `build_message/2` in `fcm.ex`
+
+| Key | Type | Notes |
+|-----|------|-------|
+| `:title` | string | Required — goes into `notification.title` |
+| `:body` | string | Required — goes into `notification.body` |
+| `:data` | map | Key-value pairs; keys and values coerced to strings. Always includes `mob_notification_json`. |
+| `:android` | map | Forwarded verbatim as FCM `AndroidConfig` (appearance, priority, channel, etc.) |
+
+## mob_notification_json — the delivery mechanism
+
+FCM sends two parallel payloads:
+1. `notification` object — OS uses this to display the system notification when the app is killed/backgrounded
+2. `data` object — always delivered to the app; includes `mob_notification_json`
+
+`mob_notification_json` is a JSON-encoded map of `{title, body, source: "push", data}`. It
+ensures the BEAM gets the notification payload regardless of which delivery path Android used:
+
+- **Killed → tapped**: `MainActivity.onCreate` reads it from `intent.extras`, stores it, delivers after BEAM boots
+- **Background → tapped**: `MainActivity.onNewIntent` reads it, calls `nativeDeliverNotification` directly to BEAM
+- **Foreground**: `MobFirebaseService.onMessageReceived` reads it from FCM data payload, delivers to BEAM
+
+All three paths deliver `{:notification, notif}` to the screen process.
+
+## Android notification appearance (`:android` key)
+
+The `:android` key passes through as FCM `AndroidConfig`. Useful fields:
+
+```elixir
+android: %{
+  "notification" => %{
+    "icon"       => "ic_notification",  # drawable resource name — must be white/transparent PNG
+    "color"      => "#FF6200EE",        # accent color (#RRGGBB or #AARRGGBB)
+    "sound"      => "default",          # or res/raw/ filename (no extension)
+    "channel_id" => "messages",         # required on Android 8+; create in MainActivity.onCreate
+    "image"      => "https://...",      # BigPictureStyle (HTTPS URL)
+    "tag"        => "thread-42"         # collapses: same tag replaces previous notification
+  },
+  "priority" => "high"   # "high" = wakes screen; "normal" = quiet
+}
+```
+
+Notification channels must be created by the Android app (Kotlin) before a notification
+using that `channel_id` arrives. Sending to a non-existent channel silently drops the
+notification on Android 8+.
+
+## iOS notification appearance
+
+iOS fields supported in `build_aps/1`:
+- `:subtitle` — second line in the tray
+- `:badge` — icon badge count
+- `:sound` — `"default"` or bundled `.aiff`/`.wav`/`.caf` filename
+
+Images on iOS require a Notification Service Extension (NSE) — an Xcode build target
+the library doesn't touch. Include an image URL in `:data` and have the NSE download
+and attach it.
 
 ## The install task
 
@@ -81,10 +158,22 @@ config :mob_push, :fcm,
 - Writes config stubs to `config/runtime.exs` with `System.get_env` wrappers
 - Offers "skip" for each platform (inserts placeholder values)
 - Explains where to get each credential as it prompts
+- Options: `--ios-only`, `--android-only`, `--skip-all`
 
 ## Dependencies
 
-- `req ~> 0.5` — HTTP client (Finch-backed, HTTP/2 support)
-- `jose ~> 1.11` — JWT signing (ES256 for APNs, RS256 for FCM)
-- `jason ~> 1.4` — JSON
-- `ex_doc` — docs only, dev/prod false
+- `req ~> 0.5` — HTTP client (Finch-backed, HTTP/2 support for APNs)
+- `jose ~> 1.11` — JWT signing (ES256 for APNs, RS256 for FCM service account)
+- `jason ~> 1.4` — JSON encode/decode
+- `ex_doc` — docs only, dev runtime: false
+
+## Generating docs
+
+```bash
+mix docs
+```
+
+Docs are output to `doc/`. The main page is `README.md`. Module groups:
+- **API**: `MobPush`
+- **Internals**: `MobPush.APNS`, `MobPush.FCM`, `MobPush.TokenCache`
+- **Mix Tasks**: `Mix.Tasks.MobPush.Install`

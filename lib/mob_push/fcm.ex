@@ -3,23 +3,108 @@ defmodule MobPush.FCM do
   FCM HTTP v1 adapter for MobPush.
 
   Sends push notifications to Android devices via Firebase Cloud Messaging
-  HTTP v1 API using a Google service account for OAuth2 authentication.
+  HTTP v1 API using a Google service account for OAuth2 authentication. Called
+  internally by `MobPush.send/3` — you can also call it directly for advanced
+  use cases.
 
   ## Configuration
 
       config :mob_push, :fcm,
-        project_id:          "my-firebase-project",
+        project_id:          "my-firebase-project",   # Firebase project ID
         service_account_key: "/path/to/service-account.json"
-        # OR: service_account_json: %{...}  (already-decoded map)
+        # OR: service_account_json: %{...}  # already-decoded map (from secret manager, etc.)
 
-  The service account JSON file is downloaded from the Firebase console:
+  The service account JSON is downloaded from Firebase console:
   Project Settings → Service Accounts → Generate new private key.
+
+  ## Payload options
+
+  | Key       | Type   | Description |
+  |-----------|--------|-------------|
+  | `:title`  | string | Notification title (required) |
+  | `:body`   | string | Notification body text (required) |
+  | `:data`   | map    | Arbitrary key-value pairs delivered to the app. Keys and values are coerced to strings (FCM data payload requirement). |
+  | `:android`| map    | Raw FCM `AndroidConfig` map — see below for appearance options. |
+
+  ## Android notification appearance
+
+  Pass an `:android` key with a nested `"notification"` map for appearance
+  customization. This is forwarded verbatim as the FCM
+  [`AndroidConfig`](https://firebase.google.com/docs/reference/fcm/rest/v1/projects.messages#androidconfig):
+
+      MobPush.send(token, :android, %{
+        title: "New message",
+        body:  "Alice: Hey!",
+        android: %{
+          "notification" => %{
+            "icon"       => "ic_notification",  # drawable resource name (no path/extension)
+            "color"      => "#FF6200EE",        # accent color — #RRGGBB or #AARRGGBB
+            "sound"      => "default",          # "default" or res/raw/ filename (no extension)
+            "channel_id" => "messages",         # notification channel ID (Android 8+)
+            "image"      => "https://...",      # HTTPS URL for BigPictureStyle large image
+            "tag"        => "msg-thread-42"     # replaces previous notification with same tag
+          },
+          "priority" => "high"   # "high" wakes screen; "normal" delivers quietly
+        }
+      })
+
+  ### Small icon
+
+  The small icon appears in the status bar. It must be a white/transparent PNG
+  bundled as a drawable resource at `android/app/src/main/res/drawable/`. Pass
+  the filename without path or extension. Android rejects colored icons in the
+  status bar — design it as a white silhouette on a transparent background.
+
+  ### Notification channels (Android 8+)
+
+  Each channel has its own sound and importance settings controlled by the user.
+  A notification sent to a non-existent `channel_id` is silently dropped on
+  Android 8+ devices. Create channels in `MainActivity.onCreate` (Kotlin):
+
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+          val channel = NotificationChannel("messages", "Messages", NotificationManager.IMPORTANCE_HIGH)
+          getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+      }
+
+  If `channel_id` is omitted, FCM uses a default channel.
+
+  ## Delivery mechanism and `mob_notification_json`
+
+  FCM sends two parallel payloads to the device:
+
+  1. **`notification` object** — displayed by the Android OS when the app is
+     killed or backgrounded. The system reads `title` and `body` from here.
+
+  2. **`data` object** — always delivered to the app, regardless of foreground/
+     background/killed state. Contains `mob_notification_json`, a JSON-encoded
+     copy of the title, body, source, and data map.
+
+  This duplication is intentional. When the app is killed and the user taps the
+  notification, Android puts the intent extras (including `mob_notification_json`)
+  into `MainActivity`'s launch intent. The BEAM reads it on startup and delivers
+  `{:notification, notif}` to your screen. When the app is in the foreground,
+  `MobFirebaseService.onMessageReceived` fires and reads `mob_notification_json`
+  from the data payload directly. Your screen always receives the same
+  `{:notification, notif}` message regardless of which path was used.
+
+  ## Authentication
+
+  Uses RS256 JWT tokens signed with the service account private key, exchanged
+  for a short-lived OAuth2 access token at `oauth2.googleapis.com/token`. Access
+  tokens are valid for 1 hour; `MobPush.TokenCache` refreshes them 5 minutes
+  early. On a 401, the token is evicted and a fresh one is fetched next call.
 
   ## Usage
 
-  Called internally by `MobPush.send/3`. You can also call it directly:
-
-      MobPush.FCM.send("device_registration_token", %{title: "Hi", body: "Hello", data: %{}})
+      MobPush.FCM.send("fcm_registration_token", %{
+        title: "New message",
+        body:  "Alice: Hey, are you free tonight?",
+        data:  %{screen: "chat", thread_id: "42"},
+        android: %{
+          "notification" => %{"icon" => "ic_notification", "color" => "#FF6200EE"},
+          "priority" => "high"
+        }
+      })
   """
 
   @fcm_url "https://fcm.googleapis.com/v1/projects"

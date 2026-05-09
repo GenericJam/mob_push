@@ -219,6 +219,19 @@ config :mob_push, :fcm,
 
 ## Usage
 
+### Before you start — app-side prerequisites
+
+**iOS:** Make sure your App ID has push notifications enabled in the Apple Developer portal
+(*Certificates, Identifiers & Profiles → Identifiers → your app → Push Notifications*),
+then re-run `mix mob.provision` so the provisioning profile picks up the capability.
+`mix mob.deploy --native` automatically mirrors `aps-environment` from the provisioning
+profile into the app's codesigning entitlements — you don't need to create or edit any
+entitlements file.
+
+**Android:** Place `google-services.json` (downloaded from *Firebase console → Project
+Settings → Your apps*) at `android/app/google-services.json`. The Android build fails
+without it.
+
 ### Step 1 — Request permission and register in the app
 
 In your Mob screen, call `Mob.Permissions.request/2` and `Mob.Notify.register_push/1`:
@@ -233,7 +246,12 @@ defmodule MyApp.HomeScreen do
     {:ok, socket}
   end
 
+  # The NIF sends a 2-tuple; forward it to the canonical 3-tuple handler.
   @impl Mob.Screen
+  def handle_info({:permission, status}, socket) when status in [:granted, :denied] do
+    handle_info({:permission, :notifications, status}, socket)
+  end
+
   def handle_info({:permission, :notifications, :granted}, socket) do
     {:noreply, Mob.Notify.register_push(socket)}
   end

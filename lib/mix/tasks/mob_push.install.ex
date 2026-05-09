@@ -64,15 +64,17 @@ defmodule Mix.Tasks.MobPush.Install do
     shell.info("You can skip either platform now and fill in the values later.\n")
 
     apns_cfg =
-      cond do
-        opts[:skip_all] or opts[:android_only] -> :skip
-        true -> prompt_apns(shell)
+      if opts[:skip_all] or opts[:android_only] do
+        :skip
+      else
+        prompt_apns(shell)
       end
 
     fcm_cfg =
-      cond do
-        opts[:skip_all] or opts[:ios_only] -> :skip
-        true -> prompt_fcm(shell)
+      if opts[:skip_all] or opts[:ios_only] do
+        :skip
+      else
+        prompt_fcm(shell)
       end
 
     if apns_cfg == :skip and fcm_cfg == :skip do
@@ -139,27 +141,31 @@ defmodule Mix.Tasks.MobPush.Install do
     block = config_block(apns_cfg, fcm_cfg)
 
     if File.exists?(runtime_exs) do
-      existing = File.read!(runtime_exs)
-
-      if String.contains?(existing, "mob_push") do
-        shell.info([
-          :yellow,
-          "\n⚠ #{runtime_exs} already contains mob_push config — skipping write.",
-          :reset
-        ])
-
-        shell.info("  Edit it manually if needed.")
-        return_next_steps(shell, apns_cfg, fcm_cfg, opts)
-        :ok
-      else
-        File.write!(runtime_exs, existing <> "\n" <> block)
-        shell.info([:green, "\n✓ Appended mob_push config to #{runtime_exs}", :reset])
-        return_next_steps(shell, apns_cfg, fcm_cfg, opts)
-      end
+      append_to_existing(runtime_exs, block, apns_cfg, fcm_cfg, shell, opts)
     else
       File.write!(runtime_exs, "import Config\n\n" <> block)
       shell.info([:green, "\n✓ Created #{runtime_exs} with mob_push config", :reset])
       return_next_steps(shell, apns_cfg, fcm_cfg)
+    end
+  end
+
+  defp append_to_existing(runtime_exs, block, apns_cfg, fcm_cfg, shell, opts) do
+    existing = File.read!(runtime_exs)
+
+    if String.contains?(existing, "mob_push") do
+      shell.info([
+        :yellow,
+        "\n⚠ #{runtime_exs} already contains mob_push config — skipping write.",
+        :reset
+      ])
+
+      shell.info("  Edit it manually if needed.")
+      return_next_steps(shell, apns_cfg, fcm_cfg, opts)
+      :ok
+    else
+      File.write!(runtime_exs, existing <> "\n" <> block)
+      shell.info([:green, "\n✓ Appended mob_push config to #{runtime_exs}", :reset])
+      return_next_steps(shell, apns_cfg, fcm_cfg, opts)
     end
   end
 

@@ -61,38 +61,25 @@ defmodule MobPush.Setup.XcodeParser do
   end
 
   defp find_in_ios_dir do
-    if File.exists?("ios") do
-      case File.ls("ios") do
-        {:ok, entries} ->
-          case Enum.find(entries, &String.ends_with?(&1, ".xcodeproj")) do
-            nil ->
-              nil
-
-            xcodeproj ->
-              path = Path.join(["ios", xcodeproj, "project.pbxproj"])
-              if File.exists?(path), do: path
-          end
-
-        _ ->
-          nil
-      end
+    with true <- File.exists?("ios"),
+         {:ok, entries} <- File.ls("ios"),
+         xcodeproj when not is_nil(xcodeproj) <-
+           Enum.find(entries, &String.ends_with?(&1, ".xcodeproj")) do
+      path = Path.join(["ios", xcodeproj, "project.pbxproj"])
+      if File.exists?(path), do: path
+    else
+      _ -> nil
     end
   end
 
   defp find_in_current_dir do
-    case File.ls(".") do
-      {:ok, entries} ->
-        case Enum.find(entries, &String.ends_with?(&1, ".xcodeproj")) do
-          nil ->
-            nil
-
-          xcodeproj ->
-            path = Path.join([xcodeproj, "project.pbxproj"])
-            if File.exists?(path), do: path
-        end
-
-      _ ->
-        nil
+    with {:ok, entries} <- File.ls("."),
+         xcodeproj when not is_nil(xcodeproj) <-
+           Enum.find(entries, &String.ends_with?(&1, ".xcodeproj")) do
+      path = Path.join([xcodeproj, "project.pbxproj"])
+      if File.exists?(path), do: path
+    else
+      _ -> nil
     end
   end
 

@@ -29,7 +29,8 @@ defmodule MobPush.MixProject do
       {:req, "~> 0.5"},
       {:jose, "~> 1.11"},
       {:jason, "~> 1.4"},
-      {:ex_doc, "~> 0.34", only: :dev, runtime: false}
+      {:ex_doc, "~> 0.34", only: :dev, runtime: false},
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false}
     ]
   end
 

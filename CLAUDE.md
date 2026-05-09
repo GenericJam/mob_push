@@ -15,13 +15,24 @@ that's left to the application.
 - `lib/mob_push/application.ex` — starts Finch (HTTP/2 pools for Apple) + TokenCache
 - `lib/mix/tasks/mob_push.install.ex` — interactive onboarding task
 
+## Pre-release checklist
+
+Before bumping the version and publishing, run **all** of these in order and
+fix every issue — do not ship with any failures or credo warnings:
+
+```bash
+mix test                   # all 17 tests must pass
+mix format                 # apply Elixir formatting
+mix credo --strict         # zero issues required — fix everything, no exceptions
+```
+
 ## Running tests
 
 ```bash
 mix test
 ```
 
-All 17 tests are pure unit tests — no network calls, no credentials needed.
+All tests are pure unit tests — no network calls, no credentials needed.
 
 ## Adding tests
 

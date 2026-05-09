@@ -39,11 +39,13 @@ defmodule Mix.Tasks.MobPush.Setup.Fcm do
       export GOOGLE_OAUTH_CLIENT_SECRET=...
   """
 
+  alias MobPush.Setup.FcmWizard
+
   @switches [dry_run: :boolean]
 
   @impl Mix.Task
   def run(argv) do
     {opts, _args, _} = OptionParser.parse(argv, strict: @switches)
-    MobPush.Setup.FcmWizard.run(opts)
+    FcmWizard.run(opts)
   end
 end

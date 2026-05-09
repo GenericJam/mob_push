@@ -29,11 +29,13 @@ defmodule Mix.Tasks.MobPush.Setup.Apns do
     * `--dry-run` — narrate all steps without writing any files
   """
 
+  alias MobPush.Setup.ApnsWizard
+
   @switches [dry_run: :boolean]
 
   @impl Mix.Task
   def run(argv) do
     {opts, _args, _} = OptionParser.parse(argv, strict: @switches)
-    MobPush.Setup.ApnsWizard.run(opts)
+    ApnsWizard.run(opts)
   end
 end

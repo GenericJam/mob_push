@@ -179,14 +179,12 @@ defmodule MobPush.FCM do
   end
 
   defp sign_service_account_jwt(sa, claims) do
-    try do
-      jwk = JOSE.JWK.from_pem(sa["private_key"])
-      header = %{"alg" => "RS256"}
-      {_, token} = JOSE.JWS.compact(JOSE.JWT.sign(jwk, header, claims))
-      {:ok, token}
-    rescue
-      e -> {:error, {:jwt_sign_error, Exception.message(e)}}
-    end
+    jwk = JOSE.JWK.from_pem(sa["private_key"])
+    header = %{"alg" => "RS256"}
+    {_, token} = JOSE.JWS.compact(JOSE.JWT.sign(jwk, header, claims))
+    {:ok, token}
+  rescue
+    e -> {:error, {:jwt_sign_error, Exception.message(e)}}
   end
 
   defp exchange_jwt(jwt) do
@@ -276,23 +274,23 @@ defmodule MobPush.FCM do
 
   defp service_account(cfg) do
     cond do
-      sa = cfg[:service_account_json] ->
-        {:ok, sa}
+      sa = cfg[:service_account_json] -> {:ok, sa}
+      path = cfg[:service_account_key] -> read_service_account(path)
+      true -> {:error, :missing_fcm_service_account_config}
+    end
+  end
 
-      path = cfg[:service_account_key] ->
-        case File.read(path) do
-          {:ok, json} ->
-            case Jason.decode(json) do
-              {:ok, sa} -> {:ok, sa}
-              {:error, reason} -> {:error, {:fcm_service_account_invalid_json, reason}}
-            end
+  defp read_service_account(path) do
+    case File.read(path) do
+      {:ok, json} -> decode_service_account(json, path)
+      {:error, reason} -> {:error, {:fcm_service_account_unreadable, path, reason}}
+    end
+  end
 
-          {:error, reason} ->
-            {:error, {:fcm_service_account_unreadable, path, reason}}
-        end
-
-      true ->
-        {:error, :missing_fcm_service_account_config}
+  defp decode_service_account(json, path) do
+    case Jason.decode(json) do
+      {:ok, sa} -> {:ok, sa}
+      {:error, reason} -> {:error, {:fcm_service_account_invalid_json, path, reason}}
     end
   end
 

@@ -16,18 +16,62 @@ Token storage and fan-out are intentionally out of scope — bring your own pers
 ```elixir
 def deps do
   [
-    {:mob_push, "~> 0.1"}
+    {:mob_push, "~> 0.2"}
   ]
 end
 ```
 
-Run the onboarding task to generate config stubs and get step-by-step setup guidance:
+### Guided setup (recommended)
+
+Two interactive wizards handle the full credential flow without leaving your terminal:
+
+**iOS (APNs):**
+
+```bash
+mix mob_push.setup.apns
+```
+
+The wizard:
+1. Auto-detects your bundle ID and team ID from the Xcode project
+2. Opens the Apple Developer portal → Keys page in your browser
+3. Tells you exactly what to click (name, APNs checkbox, Download)
+4. Watches `~/Downloads` for the `.p8` file and moves it to `~/.mob/keys/`
+5. Prompts for sandbox or production
+6. Appends the ready-to-use config block to `config/runtime.exs`
+
+One click in the browser is unavoidable — Apple has no API for creating APNs Auth Keys.
+
+Options: `--dry-run` to narrate steps without writing any files.
+
+**Android (FCM):**
+
+```bash
+mix mob_push.setup.fcm
+```
+
+The wizard:
+1. Opens your browser to Google sign-in (OAuth 2.0)
+2. Lets you pick an existing Firebase project or create a new one
+3. Registers your Android app and downloads `google-services.json`
+4. Enables the FCM HTTP v1 API
+5. Creates a `mob-fcm` service account with minimal IAM permissions
+6. Generates a service-account JSON key and saves it to `~/.mob/keys/`
+7. Appends the config block to `config/runtime.exs`
+
+Options: `--dry-run` to narrate all steps without making any API calls or writing files.
+
+### Fallback: manual onboarding task
+
+If the wizards don't fit your environment, the original interactive install task
+generates config stubs with `System.get_env` wrappers and step-by-step instructions:
 
 ```bash
 mix mob_push.install
 ```
 
-Or configure manually (see [Configuration](#configuration)).
+Options: `--ios-only`, `--android-only`, `--skip-all`.
+
+Or configure the `config/runtime.exs` block completely by hand — see [Configuration](#configuration).
 
 ---
 

@@ -65,7 +65,9 @@ defmodule MobPush.Setup.XcodeParser do
       case File.ls("ios") do
         {:ok, entries} ->
           case Enum.find(entries, &String.ends_with?(&1, ".xcodeproj")) do
-            nil -> nil
+            nil ->
+              nil
+
             xcodeproj ->
               path = Path.join(["ios", xcodeproj, "project.pbxproj"])
               if File.exists?(path), do: path
@@ -81,7 +83,9 @@ defmodule MobPush.Setup.XcodeParser do
     case File.ls(".") do
       {:ok, entries} ->
         case Enum.find(entries, &String.ends_with?(&1, ".xcodeproj")) do
-          nil -> nil
+          nil ->
+            nil
+
           xcodeproj ->
             path = Path.join([xcodeproj, "project.pbxproj"])
             if File.exists?(path), do: path

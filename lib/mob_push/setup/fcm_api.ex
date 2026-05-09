@@ -42,7 +42,11 @@ defmodule MobPush.Setup.FcmApi do
   end
 
   defp add_firebase_to_project(token, project_id) do
-    case HTTP.post("#{@firebase}/projects/#{project_id}:addFirebase", HTTP.json_headers(token), "{}") do
+    case HTTP.post(
+           "#{@firebase}/projects/#{project_id}:addFirebase",
+           HTTP.json_headers(token),
+           "{}"
+         ) do
       {:ok, %{"name" => op_name}} -> poll_firebase_operation(token, op_name)
       {:ok, resp} -> {:ok, resp}
       {:error, _} = err -> err
@@ -258,19 +262,29 @@ defmodule MobPush.Setup.FcmApi do
   # ── Operation polling ──────────────────────────────────────────────────────
 
   defp poll_firebase_operation(token, op_name, attempts \\ 0)
-  defp poll_firebase_operation(_token, op_name, 20), do: {:error, "Timed out waiting for #{op_name}"}
+
+  defp poll_firebase_operation(_token, op_name, 20),
+    do: {:error, "Timed out waiting for #{op_name}"}
 
   defp poll_firebase_operation(token, op_name, attempts) do
     url = "#{@firebase}/#{op_name}"
 
     case HTTP.get(url, HTTP.json_headers(token)) do
-      {:ok, %{"done" => true, "error" => err}} -> {:error, "Operation failed: #{inspect(err)}"}
-      {:ok, %{"done" => true, "response" => resp}} -> {:ok, resp}
-      {:ok, %{"done" => true}} -> {:ok, %{}}
+      {:ok, %{"done" => true, "error" => err}} ->
+        {:error, "Operation failed: #{inspect(err)}"}
+
+      {:ok, %{"done" => true, "response" => resp}} ->
+        {:ok, resp}
+
+      {:ok, %{"done" => true}} ->
+        {:ok, %{}}
+
       {:ok, _} ->
         Process.sleep(3_000 + attempts * 1_000)
         poll_firebase_operation(token, op_name, attempts + 1)
-      {:error, _} = err -> err
+
+      {:error, _} = err ->
+        err
     end
   end
 
@@ -281,28 +295,42 @@ defmodule MobPush.Setup.FcmApi do
     url = "#{@crm}/#{op_name}"
 
     case HTTP.get(url, HTTP.json_headers(token)) do
-      {:ok, %{"done" => true, "error" => err}} -> {:error, "Operation failed: #{inspect(err)}"}
-      {:ok, %{"done" => true}} -> :ok
+      {:ok, %{"done" => true, "error" => err}} ->
+        {:error, "Operation failed: #{inspect(err)}"}
+
+      {:ok, %{"done" => true}} ->
+        :ok
+
       {:ok, _} ->
         Process.sleep(3_000 + attempts * 1_000)
         poll_crm_operation(token, op_name, attempts + 1)
-      {:error, _} = err -> err
+
+      {:error, _} = err ->
+        err
     end
   end
 
   defp poll_service_usage_operation(token, op_name, attempts \\ 0)
-  defp poll_service_usage_operation(_token, op_name, 20), do: {:error, "Timed out waiting for #{op_name}"}
+
+  defp poll_service_usage_operation(_token, op_name, 20),
+    do: {:error, "Timed out waiting for #{op_name}"}
 
   defp poll_service_usage_operation(token, op_name, attempts) do
     url = "#{@service_usage}/#{op_name}"
 
     case HTTP.get(url, HTTP.json_headers(token)) do
-      {:ok, %{"done" => true, "error" => err}} -> {:error, "Operation failed: #{inspect(err)}"}
-      {:ok, %{"done" => true}} -> :ok
+      {:ok, %{"done" => true, "error" => err}} ->
+        {:error, "Operation failed: #{inspect(err)}"}
+
+      {:ok, %{"done" => true}} ->
+        :ok
+
       {:ok, _} ->
         Process.sleep(3_000 + attempts * 1_000)
         poll_service_usage_operation(token, op_name, attempts + 1)
-      {:error, _} = err -> err
+
+      {:error, _} = err ->
+        err
     end
   end
 end

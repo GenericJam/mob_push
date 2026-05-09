@@ -15,7 +15,9 @@ defmodule MobPush.Setup.FcmWizard do
 
     shell.info([:bright, "\n=== Mob FCM Setup ===\n", :reset])
 
-    package_name = Keyword.get(opts, :package_name) || detect_package_name() || prompt_package(shell)
+    package_name =
+      Keyword.get(opts, :package_name) || detect_package_name() || prompt_package(shell)
+
     shell.info("[auto-detected] Package name: #{package_name}\n")
 
     if dry_run do

@@ -51,7 +51,6 @@ defmodule MobPush.APNS do
       })
   """
 
-  require Logger
 
   @sandbox_url "https://api.sandbox.push.apple.com"
   @production_url "https://api.push.apple.com"

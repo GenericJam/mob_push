@@ -145,7 +145,11 @@ defmodule MobPush.APNS do
 
   # ── Payload building ───────────────────────────────────────────────────────
 
-  defp build_aps(%{title: title, body: body} = payload) do
+  @doc false
+  # Pure payload builder, public as the contract-test seam: the vendored
+  # fixture test/fixtures/push_contract.exs (shared byte-identically with the
+  # device-side mob_notify repo) pins the exact wire shape this produces.
+  def build_aps(%{title: title, body: body} = payload) do
     alert = %{"title" => title, "body" => body}
 
     alert =

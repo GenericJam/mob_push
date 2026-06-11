@@ -218,7 +218,11 @@ defmodule MobPush.FCM do
 
   # ── Message building ───────────────────────────────────────────────────────
 
-  defp build_message(device_token, %{title: title, body: body} = payload) do
+  @doc false
+  # Pure payload builder, public as the contract-test seam: the vendored
+  # fixture test/fixtures/push_contract.exs (shared byte-identically with the
+  # device-side mob_notify repo) pins the exact wire shape this produces.
+  def build_message(device_token, %{title: title, body: body} = payload) do
     notification = %{"title" => title, "body" => body}
     data = Map.get(payload, :data, %{})
 

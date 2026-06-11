@@ -51,7 +51,6 @@ defmodule MobPush.APNS do
       })
   """
 
-
   @sandbox_url "https://api.sandbox.push.apple.com"
   @production_url "https://api.push.apple.com"
 
@@ -148,6 +147,7 @@ defmodule MobPush.APNS do
   # Pure payload builder, public as the contract-test seam: the vendored
   # fixture test/fixtures/push_contract.exs (shared byte-identically with the
   # device-side mob_notify repo) pins the exact wire shape this produces.
+  @spec build_aps(map()) :: String.t()
   def build_aps(%{title: title, body: body} = payload) do
     alert = %{"title" => title, "body" => body}
 

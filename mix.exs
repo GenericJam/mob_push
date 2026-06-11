@@ -30,7 +30,9 @@ defmodule MobPush.MixProject do
       {:jose, "~> 1.11"},
       {:jason, "~> 1.4"},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},
-      {:credo, "~> 1.7", only: [:dev, :test], runtime: false}
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:ex_slop, "~> 0.4.2", only: [:dev, :test], runtime: false},
+      {:jump_credo_checks, "~> 0.1.0", only: [:dev, :test], runtime: false}
     ]
   end
 

@@ -15,6 +15,7 @@ defmodule MobPush.TokenCache do
   # Refresh 5 minutes before actual expiry to avoid edge cases.
   @refresh_margin_s 300
 
+  @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(_opts) do
     GenServer.start_link(__MODULE__, [], name: __MODULE__)
   end

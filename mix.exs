@@ -11,6 +11,7 @@ defmodule MobPush.MixProject do
       elixir: "~> 1.15",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
+      aliases: aliases(),
       description: "Server-side push notifications for Mob apps — APNs (iOS) and FCM (Android)",
       package: package(),
       docs: docs()
@@ -22,6 +23,13 @@ defmodule MobPush.MixProject do
       extra_applications: [:logger, :public_key],
       mod: {MobPush.Application, []}
     ]
+  end
+
+  defp aliases do
+    # `mix setup` after cloning installs deps and activates the shared git
+    # hooks (.githooks): format / Credo --strict / compile run on every push
+    # and the full suite when mix.exs changes — the same gate CI enforces.
+    [setup: ["deps.get", "cmd git config core.hooksPath .githooks"]]
   end
 
   defp deps do

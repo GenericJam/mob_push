@@ -40,10 +40,8 @@ defmodule MobPush.FCMTest do
   end
 
   test "message payload includes notification and data" do
-    # Test the payload builder indirectly by inspecting what Jason encodes.
-    # We call the private function via the module directly here.
     payload = %{title: "Hello", body: "World", data: %{screen: "home", id: 42}}
-    encoded = build_message("tok", payload)
+    encoded = FCM.build_message("tok", payload)
     decoded = Jason.decode!(encoded)
 
     assert decoded["message"]["token"] == "tok"
@@ -52,23 +50,28 @@ defmodule MobPush.FCMTest do
     assert decoded["message"]["data"]["screen"] == "home"
     # stringified
     assert decoded["message"]["data"]["id"] == "42"
+
+    assert Jason.decode!(decoded["message"]["data"]["mob_notification_json"]) == %{
+             "title" => "Hello",
+             "body" => "World",
+             "source" => "push",
+             "data" => %{"screen" => "home", "id" => "42"}
+           }
   end
 
-  # ── Helpers ────────────────────────────────────────────────────────────────
+  test "message payload includes the delivery envelope without custom data" do
+    decoded =
+      FCM.build_message("tok", %{title: "Hello", body: "World"})
+      |> Jason.decode!()
 
-  # Access the private build_message through the module without :erlang.apply tricks —
-  # just duplicate the logic here for assertion purposes.
-  defp build_message(token, %{title: title, body: body} = payload) do
-    notification = %{"title" => title, "body" => body}
-    message = %{"token" => token, "notification" => notification}
+    assert %{"mob_notification_json" => envelope_json} = decoded["message"]["data"]
+    assert map_size(decoded["message"]["data"]) == 1
 
-    message =
-      if data = Map.get(payload, :data) do
-        Map.put(message, "data", Map.new(data, fn {k, v} -> {to_string(k), to_string(v)} end))
-      else
-        message
-      end
-
-    Jason.encode!(%{"message" => message})
+    assert Jason.decode!(envelope_json) == %{
+             "title" => "Hello",
+             "body" => "World",
+             "source" => "push",
+             "data" => %{}
+           }
   end
 end

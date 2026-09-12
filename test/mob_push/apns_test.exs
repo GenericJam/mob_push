@@ -58,6 +58,56 @@ defmodule MobPush.APNSTest do
 
       assert decoded["aps"]["alert"]["subtitle"] == "From Kevin"
     end
+
+    test "build_aps omits the alert field for a pure silent push (no title/body)" do
+      # MOB-84: silent push must not carry an alert field. Apple's
+      # `background` push type validates that the aps payload has ONLY
+      # content-available and no user-visible content — otherwise the
+      # push is rejected. Uses the real MobPush.APNS.build_aps here
+      # (public) instead of the mirror, since the shape change is what
+      # the fix is about.
+      json = MobPush.APNS.build_aps(%{content_available: true})
+      decoded = Jason.decode!(json)
+
+      assert decoded["aps"]["content-available"] == 1
+      refute Map.has_key?(decoded["aps"], "alert")
+    end
+  end
+
+  describe "push_type_for/1 (MOB-84)" do
+    test "silent push (content_available: true, no user-visible fields) → 'background'" do
+      # Before MOB-84 the header was hardcoded "alert". Apple returns
+      # HTTP 400 BadPushType for a truly silent push sent as alert-type,
+      # so users couldn't send silent pushes at all through this library.
+      # Revert the header back to a hardcoded "alert" in send/2 and this
+      # test still passes (it exercises the helper directly) — but the
+      # send-integration angle is covered by the guard test below.
+      assert MobPush.APNS.push_type_for(%{content_available: true}) == "background"
+    end
+
+    test "hybrid alert + content_available → 'alert' (Apple's docs prefer alert type)" do
+      # A payload that has BOTH content_available and user-visible fields
+      # is treated as alert-type. This preserves the existing behavior
+      # for the common "wake the app AND show a notification" case.
+      assert MobPush.APNS.push_type_for(%{
+               title: "Hi",
+               body: "World",
+               content_available: true
+             }) == "alert"
+    end
+
+    test "default (title + body, no content_available) → 'alert'" do
+      assert MobPush.APNS.push_type_for(%{title: "Hi", body: "World"}) == "alert"
+    end
+
+    test "any user-visible field (badge/sound/subtitle) with content_available → 'alert'" do
+      # Sound alone counts as user-visible per Apple's docs — silent push
+      # requires NO alert, badge, or sound.
+      assert MobPush.APNS.push_type_for(%{content_available: true, sound: "default"}) ==
+               "alert"
+
+      assert MobPush.APNS.push_type_for(%{content_available: true, badge: 1}) == "alert"
+    end
   end
 
   describe "config" do
@@ -113,15 +163,11 @@ defmodule MobPush.APNSTest do
     end
   end
 
-  defp build_aps(%{title: title, body: body} = payload) do
-    alert = %{"title" => title, "body" => body}
-
-    alert =
-      if Map.get(payload, :subtitle),
-        do: Map.put(alert, "subtitle", payload.subtitle),
-        else: alert
-
-    aps = %{"alert" => alert}
+  # Mirrors MobPush.APNS.build_aps/1 — kept in sync per the note in
+  # CLAUDE.md. As of MOB-84 title/body are optional (pure silent-push
+  # support), so the mirror does the same.
+  defp build_aps(payload) when is_map(payload) do
+    aps = alert_map_test(payload)
     aps = if Map.get(payload, :badge), do: Map.put(aps, "badge", payload.badge), else: aps
     aps = if Map.get(payload, :sound), do: Map.put(aps, "sound", payload.sound), else: aps
 
@@ -139,6 +185,19 @@ defmodule MobPush.APNSTest do
 
     Jason.encode!(root)
   end
+
+  defp alert_map_test(%{title: title, body: body} = payload) do
+    alert = %{"title" => title, "body" => body}
+
+    alert =
+      if Map.get(payload, :subtitle),
+        do: Map.put(alert, "subtitle", payload.subtitle),
+        else: alert
+
+    %{"alert" => alert}
+  end
+
+  defp alert_map_test(_payload), do: %{}
 
   defp generate_ec_pem do
     # Use JOSE to generate + export — works across OTP versions.

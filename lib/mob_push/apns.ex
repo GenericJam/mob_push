@@ -66,7 +66,7 @@ defmodule MobPush.APNS do
       headers = [
         {"authorization", "bearer #{jwt}"},
         {"apns-topic", cfg[:bundle_id]},
-        {"apns-push-type", "alert"},
+        {"apns-push-type", push_type_for(payload)},
         {"content-type", "application/json"}
       ]
 
@@ -143,20 +143,48 @@ defmodule MobPush.APNS do
 
   # ── Payload building ───────────────────────────────────────────────────────
 
+  @doc """
+  Decides the `apns-push-type` header value for a payload.
+
+  Apple enforces this header (since iOS 13). The two shapes users hit:
+
+  - `"background"` — silent push. Payload has `content_available: true` AND
+    NO user-visible field (no `:title`, `:body`, `:subtitle`, `:sound`, or
+    `:badge`). Sending a truly silent push with `"alert"` returns
+    HTTP 400 `BadPushType` from Apple. See MOB-84.
+  - `"alert"` — the default for everything else (any payload with an
+    alert, badge, or sound). This includes hybrid alerts that ALSO set
+    `content_available` — Apple treats those as alert-type per the docs.
+
+  `Mob.Push` doesn't use the other push types (`voip`, `location`,
+  `liveactivity`, etc.) yet; extend this function if new use cases
+  need them.
+  """
+  @spec push_type_for(map()) :: String.t()
+  def push_type_for(payload) do
+    silent? =
+      Map.get(payload, :content_available) == true and
+        not user_visible?(payload)
+
+    if silent?, do: "background", else: "alert"
+  end
+
+  defp user_visible?(payload) do
+    Enum.any?([:title, :body, :subtitle, :sound, :badge], &Map.has_key?(payload, &1))
+  end
+
   @doc false
   # Pure payload builder, public as the contract-test seam: the vendored
   # fixture test/fixtures/push_contract.exs (shared byte-identically with the
   # device-side mob_notify repo) pins the exact wire shape this produces.
+  #
+  # `:title` / `:body` are optional as of MOB-84 — a silent push
+  # (`content_available: true` with no alert fields) emits an aps map
+  # with only `"content-available": 1`, matching Apple's requirements
+  # for the `background` push type.
   @spec build_aps(map()) :: String.t()
-  def build_aps(%{title: title, body: body} = payload) do
-    alert = %{"title" => title, "body" => body}
-
-    alert =
-      if Map.get(payload, :subtitle),
-        do: Map.put(alert, "subtitle", payload.subtitle),
-        else: alert
-
-    aps = %{"alert" => alert}
+  def build_aps(payload) when is_map(payload) do
+    aps = alert_map(payload)
     aps = if Map.get(payload, :badge), do: Map.put(aps, "badge", payload.badge), else: aps
     aps = if Map.get(payload, :sound), do: Map.put(aps, "sound", payload.sound), else: aps
 
@@ -170,6 +198,19 @@ defmodule MobPush.APNS do
 
     Jason.encode!(root)
   end
+
+  defp alert_map(%{title: title, body: body} = payload) do
+    alert = %{"title" => title, "body" => body}
+
+    alert =
+      if Map.get(payload, :subtitle),
+        do: Map.put(alert, "subtitle", payload.subtitle),
+        else: alert
+
+    %{"alert" => alert}
+  end
+
+  defp alert_map(_payload), do: %{}
 
   defp stringify_keys(map) when is_map(map) do
     Map.new(map, fn {k, v} -> {to_string(k), v} end)

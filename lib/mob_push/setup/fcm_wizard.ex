@@ -35,6 +35,7 @@ defmodule MobPush.Setup.FcmWizard do
 
     shell.info([:cyan, "\n── Step 1/6: Sign in to Google ──", :reset])
     shell.info("  → Opens browser OAuth flow to accounts.google.com")
+    shell.info("  → Requires GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET")
 
     shell.info([:cyan, "\n── Step 2/6: Select Firebase project ──", :reset])
     shell.info("  → Lists your projects; you pick one or create new")

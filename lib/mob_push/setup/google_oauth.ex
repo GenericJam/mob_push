@@ -11,17 +11,15 @@ defmodule MobPush.Setup.GoogleOAuth do
   #
   # ## OAuth client registration
   #
-  # Register a "Desktop app" OAuth client at:
+  # Each user must register a "Desktop app" OAuth client at:
   #   https://console.cloud.google.com/apis/credentials
-  # Fill in @default_client_id and @default_client_secret after registration.
-  # Users can override with GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET.
+  # and provide GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET.
   # Per Google's guidance for installed CLI tools, the client_secret is not
   # actually secret — the same model used by gcloud CLI.
 
   alias MobPush.Setup.HTTP
 
-  @default_client_id "TODO_REGISTER.apps.googleusercontent.com"
-  @default_client_secret "TODO_REGISTER_SECRET"
+  @credentials_url "https://console.cloud.google.com/apis/credentials"
 
   @auth_url "https://accounts.google.com/o/oauth2/v2/auth"
   @token_url "https://oauth2.googleapis.com/token"
@@ -46,25 +44,50 @@ defmodule MobPush.Setup.GoogleOAuth do
   def authorize(opts \\ []) do
     scopes = Keyword.fetch!(opts, :scopes)
     timeout_ms = Keyword.get(opts, :timeout_ms, 120_000)
-    client_id = System.get_env("GOOGLE_OAUTH_CLIENT_ID", @default_client_id)
-    client_secret = System.get_env("GOOGLE_OAUTH_CLIENT_SECRET", @default_client_secret)
 
-    if String.starts_with?(client_id, "TODO") do
-      {:error,
-       "Google OAuth client not registered yet. " <>
-         "See MobPush.Setup.GoogleOAuth moduledoc for registration steps, " <>
-         "or set GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET env vars."}
+    case validate_client_credentials(
+           System.get_env("GOOGLE_OAUTH_CLIENT_ID"),
+           System.get_env("GOOGLE_OAUTH_CLIENT_SECRET")
+         ) do
+      {:ok, {client_id, client_secret}} ->
+        HTTP.ensure_started!()
+
+        with {:ok, port} <- find_free_port(),
+             redirect_uri = "http://localhost:#{port}/callback",
+             url = build_auth_url(client_id, scopes, redirect_uri),
+             :ok <- open_browser(url),
+             {:ok, code} <- await_callback(port, timeout_ms),
+             {:ok, tokens} <- exchange_code(client_id, client_secret, code, redirect_uri) do
+          {:ok, tokens["access_token"]}
+        end
+
+      {:error, _reason} = error ->
+        error
+    end
+  end
+
+  @doc false
+  @spec validate_client_credentials(String.t() | nil, String.t() | nil) ::
+          {:ok, {String.t(), String.t()}} | {:error, String.t()}
+  def validate_client_credentials(client_id, client_secret) do
+    missing =
+      [
+        {"GOOGLE_OAUTH_CLIENT_ID", client_id},
+        {"GOOGLE_OAUTH_CLIENT_SECRET", client_secret}
+      ]
+      |> Enum.filter(fn {_name, value} ->
+        not is_binary(value) or String.trim(value) == "" or
+          String.starts_with?(String.trim(value), "TODO")
+      end)
+      |> Enum.map_join(" and ", &elem(&1, 0))
+
+    if missing == "" do
+      {:ok, {String.trim(client_id), String.trim(client_secret)}}
     else
-      HTTP.ensure_started!()
-
-      with {:ok, port} <- find_free_port(),
-           redirect_uri = "http://localhost:#{port}/callback",
-           url = build_auth_url(client_id, scopes, redirect_uri),
-           :ok <- open_browser(url),
-           {:ok, code} <- await_callback(port, timeout_ms),
-           {:ok, tokens} <- exchange_code(client_id, client_secret, code, redirect_uri) do
-        {:ok, tokens["access_token"]}
-      end
+      {:error,
+       "FCM setup requires your own Google OAuth Desktop app client; mob_push does not " <>
+         "ship a shared client. Create one at #{@credentials_url}, then set #{missing} " <>
+         "before running mix mob_push.setup.fcm."}
     end
   end
 

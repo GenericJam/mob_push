@@ -21,9 +21,10 @@ def deps do
 end
 ```
 
-### Guided setup (recommended)
+### Guided setup
 
-Two interactive wizards handle the full credential flow without leaving your terminal:
+Two interactive wizards guide the platform credential setup. The FCM wizard
+has a one-time Google Cloud prerequisite described below.
 
 **iOS (APNs):**
 
@@ -45,6 +46,18 @@ Options: `--dry-run` to narrate steps without writing any files.
 
 **Android (FCM):**
 
+`mob_push` does not ship a shared Google OAuth client. Before using the FCM
+wizard, create an OAuth 2.0 Client ID with application type **Desktop app** in
+[Google Cloud Credentials](https://console.cloud.google.com/apis/credentials),
+then export its credentials:
+
+```bash
+export GOOGLE_OAUTH_CLIENT_ID=...
+export GOOGLE_OAUTH_CLIENT_SECRET=...
+```
+
+Do not commit these values. Once they are set, run:
+
 ```bash
 mix mob_push.setup.fcm
 ```
@@ -59,6 +72,9 @@ The wizard:
 7. Appends the config block to `config/runtime.exs`
 
 Options: `--dry-run` to narrate all steps without making any API calls or writing files.
+
+If you do not want to create an OAuth client, use the manual onboarding task
+below with an existing Firebase service-account key.
 
 ### Fallback: manual onboarding task
 

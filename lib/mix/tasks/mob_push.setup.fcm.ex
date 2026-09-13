@@ -4,8 +4,8 @@ defmodule Mix.Tasks.MobPush.Setup.Fcm do
   @shortdoc "Set up Firebase Cloud Messaging credentials for Android push notifications"
 
   @moduledoc """
-  Interactive wizard that fully provisions FCM credentials for Android push
-  notifications — no Firebase console browsing required.
+  Interactive wizard that provisions FCM credentials for Android push
+  notifications after you configure a Google OAuth Desktop app client.
 
   Run from your project root:
 
@@ -27,16 +27,20 @@ defmodule Mix.Tasks.MobPush.Setup.Fcm do
 
   ## Prerequisites
 
-  A Google account with access to Firebase is all that's required. The wizard
-  can create the Firebase project if one doesn't exist yet.
+  You need a Google account and your own Google OAuth "Desktop app" client.
+  The wizard can create the Firebase project if one doesn't exist yet, but
+  `mob_push` does not ship a shared Google OAuth client.
 
   ### Google OAuth client
 
-  The wizard uses a bundled OAuth "Desktop app" client registered for Mob. You
-  can override with environment variables if your organisation requires its own:
+  Before running the wizard, create an OAuth 2.0 Client ID with application type
+  **Desktop app** at https://console.cloud.google.com/apis/credentials, then set:
 
       export GOOGLE_OAUTH_CLIENT_ID=...
       export GOOGLE_OAUTH_CLIENT_SECRET=...
+
+  If you do not want to create an OAuth client, use `mix mob_push.install` and
+  configure an existing Firebase service-account key instead.
   """
 
   alias MobPush.Setup.FcmWizard

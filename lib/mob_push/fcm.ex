@@ -223,41 +223,73 @@ defmodule MobPush.FCM do
   # fixture test/fixtures/push_contract.exs (shared byte-identically with the
   # device-side mob_notify repo) pins the exact wire shape this produces.
   @spec build_message(String.t(), map()) :: String.t()
-  def build_message(device_token, %{title: title, body: body} = payload) do
-    notification = %{"title" => title, "body" => body}
+  def build_message(device_token, payload) when is_map(payload) do
     data = Map.get(payload, :data, %{})
 
-    # mob_notification_json lets MainActivity reconstruct the notification when
-    # the user taps it from the system tray (background/killed state).
-    # MobFirebaseService.onMessageReceived uses it for foreground delivery.
-    mob_json =
-      Jason.encode!(%{
-        "title" => title,
-        "body" => body,
-        "source" => "push",
-        "data" => Map.new(data, fn {k, v} -> {to_string(k), to_string(v)} end)
-      })
-
-    android_data =
-      data
-      |> stringify_keys()
-      |> Map.put("mob_notification_json", mob_json)
-
-    message = %{
-      "token" => device_token,
-      "notification" => notification,
-      "data" => android_data
-    }
-
-    # Android-specific options
     message =
-      if android_opts = Map.get(payload, :android) do
-        Map.put(message, "android", android_opts)
+      if silent?(payload) do
+        # Data-only FCM message (mirror of APNs `background` push type from
+        # MOB-84). No `notification` block — critical: an FCM message with a
+        # `notification` block is handled by the Android OS when the app is
+        # backgrounded (delivered to the system tray, service never invoked),
+        # so `MobWakeFcmService.onMessageReceived` never fires. Data-only
+        # invokes the service in every state. Priority `high` bypasses Doze
+        # so the app wakes even on constrained devices, matching Apple's
+        # silent-push wake semantics.
+        %{
+          "token" => device_token,
+          "data" => stringify_keys(data),
+          "android" => Map.merge(%{"priority" => "high"}, Map.get(payload, :android, %{}))
+        }
       else
-        message
+        title = Map.get(payload, :title)
+        body = Map.get(payload, :body)
+
+        unless is_binary(title) and is_binary(body) do
+          raise ArgumentError,
+                "MobPush.FCM.build_message requires :title and :body for a visible push. " <>
+                  "Omit both and set content_available: true for a silent (data-only) message."
+        end
+
+        notification = %{"title" => title, "body" => body}
+
+        # mob_notification_json lets MainActivity reconstruct the notification when
+        # the user taps it from the system tray (background/killed state).
+        # MobFirebaseService.onMessageReceived uses it for foreground delivery.
+        mob_json =
+          Jason.encode!(%{
+            "title" => title,
+            "body" => body,
+            "source" => "push",
+            "data" => Map.new(data, fn {k, v} -> {to_string(k), to_string(v)} end)
+          })
+
+        android_data =
+          data
+          |> stringify_keys()
+          |> Map.put("mob_notification_json", mob_json)
+
+        base = %{
+          "token" => device_token,
+          "notification" => notification,
+          "data" => android_data
+        }
+
+        if android_opts = Map.get(payload, :android),
+          do: Map.put(base, "android", android_opts),
+          else: base
       end
 
     Jason.encode!(%{"message" => message})
+  end
+
+  # Same silent-push detection APNs uses (MOB-84): `content_available: true`
+  # AND no user-visible fields present. Any user-visible field means the
+  # caller wants a hybrid push (visible + wake payload) and we keep the
+  # historical behaviour.
+  defp silent?(payload) do
+    Map.get(payload, :content_available) == true and
+      not Enum.any?([:title, :body, :subtitle, :sound, :badge], &Map.has_key?(payload, &1))
   end
 
   defp stringify_keys(map) when is_map(map) do

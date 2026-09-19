@@ -8,6 +8,24 @@ defmodule MobPush do
 
   Token storage and fan-out are intentionally out of scope — bring your own persistence.
 
+  ## Which plugin do I actually want?
+
+  The push/background/wake/notify quartet gets mixed up regularly.
+  Four distinct concerns:
+
+  | I want to…                                             | Plugin                                                            |
+  |--------------------------------------------------------|-------------------------------------------------------------------|
+  | **Send** a push from my server                         | **`mob_push`** (this library; no device code)                     |
+  | **Receive** a push token on the device + register it   | [`mob_notify`](https://hexdocs.pm/mob_notify) (device-side)       |
+  | Run a handler when the OS wakes my app via silent push | [`mob_wake`](https://hexdocs.pm/mob_wake) (device-side)           |
+  | Keep my app alive while the user is on another screen  | [`mob_background`](https://hexdocs.pm/mob_background) (device-side) |
+
+  `mob_push` is deliberately Elixir-only and has **zero mob
+  dependency** — it works with any push token from any client. When
+  paired with a mob app it's the send side of a `mob_notify`
+  registration (for user-visible notifications) or a `mob_wake` silent
+  push (for OS-triggered handlers).
+
   ## Setup
 
   Add to your `mix.exs`:
@@ -99,6 +117,57 @@ defmodule MobPush do
   | `:sound`             | iOS       | string  | `"default"` or a filename bundled in the app         |
   | `:content_available` | iOS       | boolean | Silent push — wakes app in background, no alert      |
   | `:android`           | Android   | map     | Raw FCM `AndroidConfig` for appearance customization |
+
+  ## Silent push (content-available)
+
+  `content_available: true` combined with no visible fields (no title,
+  body, subtitle, sound or badge) sends a **silent** push:
+
+  * **iOS**: sent with `push_type: background` and priority 5. Wakes
+    the app in the background with a ~30-second execution window; no
+    banner, no sound, no badge. Governed by APNs's discretionary
+    delivery rules — Apple throttles apps that misbehave.
+  * **Android**: sent as a **data-only** FCM message (no `notification`
+    block). Delivered to `MobFirebaseService.onMessageReceived` at
+    priority `high`, bypassing Doze if the payload is small.
+
+  On the device, silent pushes go to the plugin that owns the wake
+  handler dispatch — that's [`mob_wake`](https://hexdocs.pm/mob_wake).
+  The wire contract (`"mob_wake_id"` key on the top-level payload) is
+  shared between `mob_push`'s send side and `mob_wake`'s receive side.
+
+  ### iOS silent-push preconditions (host-side)
+
+  Sandbox APNs will silently drop a push if any of these isn't true:
+
+  1. **App ID** has **Push Notifications** capability enabled in Apple
+     Developer Portal.
+  2. **Provisioning profile** was regenerated after step 1 (the
+     original profile doesn't grant `aps-environment` and any build
+     signed with it never gets a device token).
+  3. **Info.plist** declares `UIBackgroundModes: remote-notification`
+     (mob_new's iOS template ships this since MOB-271).
+  4. **AppDelegate** implements
+     `application:didReceiveRemoteNotification:fetchCompletionHandler:`
+     and routes payloads with `mob_wake_id` to
+     `MobWakeDispatcher.onPushFired:completionHandler:` (mob_new
+     template ships this since MOB-271).
+  5. **Environment match**: the token was minted for the same
+     environment the server sends to. A `development` (sandbox) token
+     sent to `api.push.apple.com` returns `BadDeviceToken` and vice
+     versa. `config :mob_push, :apns, env: :sandbox` for dev-signed
+     builds; `:production` for TestFlight / App Store.
+
+  The failure mode when any of 1-4 is missing: `MobNotify.register_push/1`
+  looks like it succeeds, but `{:push_token, :ios, _}` never arrives
+  and `MobPush.send/3` fails with `:device_token_not_found`. The iOS
+  system log (Xcode Console, `xcrun devicectl device console`) will
+  show `[Mob] Failed to register for remote notifications:` with the
+  underlying `NSError` naming what's missing.
+
+  See [mob_wake](https://hexdocs.pm/mob_wake)'s moduledoc for the full
+  three-state device matrix (foreground / backgrounded / force-quit)
+  and platform-specific behavior around each state.
 
   ## Return values
 

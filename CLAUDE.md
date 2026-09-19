@@ -1,5 +1,9 @@
 # mob_push — Agent Instructions
 
+Start with [`AGENTS.md`](AGENTS.md) — mob_push-specific orientation (what
+it is, what it is NOT, cross-repo work, pre-empt-failure rules). This
+file goes deeper on the internal mechanics.
+
 ## What this library does
 
 `mob_push` is a server-side Elixir library for sending push notifications to Mob apps.

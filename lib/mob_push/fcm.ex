@@ -204,7 +204,10 @@ defmodule MobPush.FCM do
 
     case Req.post(req) do
       {:ok, %{status: 200, body: resp}} ->
+        # Req decodes JSON to string keys; atom keys come from stubbed/adapted responses.
+        # credo:disable-for-next-line ExSlop.Check.Warning.DualKeyAccess
         token = resp["access_token"] || resp[:access_token]
+        # credo:disable-for-next-line ExSlop.Check.Warning.DualKeyAccess
         expires_in = resp["expires_in"] || resp[:expires_in] || 3600
         {:ok, token, expires_in}
 

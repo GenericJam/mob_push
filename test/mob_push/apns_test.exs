@@ -10,7 +10,7 @@ defmodule MobPush.APNSTest do
       {:ok, {token, expires_at}} = sign_jwt("TEAMID123", "KEYID12345", pem)
 
       parts = String.split(token, ".")
-      assert length(parts) == 3
+      assert [_, _, _] = parts
 
       header = parts |> hd() |> Base.url_decode64!(padding: false) |> Jason.decode!()
       payload = parts |> Enum.at(1) |> Base.url_decode64!(padding: false) |> Jason.decode!()

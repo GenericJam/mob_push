@@ -15,7 +15,7 @@ Thin HTTP/2 client for Apple + Google's push endpoints. `MobPush.send(token, :io
 * **Not `mob_notify`.** `mob_notify` is the DEVICE side — schedule, cancel, register-for-push. Two ends of the same wire. Both are needed for a full remote-push flow. The wire contract is pinned by `test/fixtures/push_contract.exs`, vendored byte-identically in both repos.
 * **Not `mob_wake`.** `mob_wake` is the DEVICE-side receive for silent pushes and OS scheduler firings. `mob_push` can send a payload shaped for `mob_wake` — see `MobWake.wake_payload/2` — but the receive-side handler dispatch belongs there, not here.
 * **Not a token store.** `mob_push` never persists tokens. Deleted / expired tokens surface as `{:error, :device_token_expired | :device_token_not_found}`; callers are expected to prune their own DB.
-* **Not a fan-out engine.** Sending to N devices means N calls. Rate limiting, retry, and backoff live in your calling code. Finch pool sizing is tuned for reasonable concurrency but not tens of thousands.
+* **Not a fan-out engine.** Sending to N devices means N calls. Rate limiting, retry, and backoff live in your calling code. The one exception is `MobPush.HTTP`'s brief retry of errors where the server provably did not process the request (MOB-318). Finch pool sizing is tuned for reasonable concurrency but not tens of thousands.
 
 ## Anatomy of the library
 
@@ -23,6 +23,7 @@ Thin HTTP/2 client for Apple + Google's push endpoints. `MobPush.send(token, :io
 * `lib/mob_push/apns.ex` — APNs adapter: ES256 JWT signing, HTTP/2 to Apple. `build_aps/1` builds the `aps` dict. `parse_error/1` maps Apple's response codes to Elixir atoms.
 * `lib/mob_push/fcm.ex` — FCM adapter: RS256 JWT → Google OAuth2 access token → FCM HTTP v1. `build_message/2` handles both visible (with `notification` block) and silent (data-only) shapes.
 * `lib/mob_push/token_cache.ex` — ETS GenServer: caches the APNs JWT (~50 min) and FCM OAuth2 tokens (~55 min). Eviction is manual (`MobPush.TokenCache.evict/1`) on 401/403.
+* `lib/mob_push/http.ex` — the only place APNs/FCM make HTTP requests. Retries errors where the server did not process the request (`pool_not_available` / `disconnected`: never left the node; `unprocessed` / `{:server_closed_request, :refused_stream}`: GOAWAY or REFUSED_STREAM). No retry starts later than 1.5 s after the first attempt, so a caller waits at most that plus one attempt. Never retries anything Apple/Google may have processed, because a resend could deliver the push twice.
 * `lib/mob_push/application.ex` — starts Finch (pre-configured HTTP/2 pools for both Apple endpoints) + TokenCache.
 * `lib/mix/tasks/mob_push.install.ex` — interactive onboarding.
 * `lib/mix/tasks/mob_push.setup.apns.ex` — walks a user through creating an APNs Auth Key on Apple Developer Portal + drops the config into runtime.exs.

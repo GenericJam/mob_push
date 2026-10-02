@@ -121,18 +121,12 @@ defmodule MobPush.FCM do
       url = "#{@fcm_url}/#{cfg[:project_id]}/messages:send"
       body = build_message(device_token, payload)
 
-      req =
-        Req.new(
-          finch: MobPush.Finch,
-          url: url,
-          headers: [
-            {"authorization", "Bearer #{access_token}"},
-            {"content-type", "application/json"}
-          ],
-          body: body
-        )
+      headers = [
+        {"authorization", "Bearer #{access_token}"},
+        {"content-type", "application/json"}
+      ]
 
-      case Req.post(req) do
+      case MobPush.HTTP.post(url: url, headers: headers, body: body) do
         {:ok, %{status: 200}} ->
           :ok
 
@@ -194,15 +188,9 @@ defmodule MobPush.FCM do
         "assertion" => jwt
       })
 
-    req =
-      Req.new(
-        finch: MobPush.Finch,
-        url: @token_url,
-        headers: [{"content-type", "application/x-www-form-urlencoded"}],
-        body: body
-      )
+    headers = [{"content-type", "application/x-www-form-urlencoded"}]
 
-    case Req.post(req) do
+    case MobPush.HTTP.post(url: @token_url, headers: headers, body: body) do
       {:ok, %{status: 200, body: resp}} ->
         # Req decodes JSON to string keys; atom keys come from stubbed/adapted responses.
         # credo:disable-for-next-line ExSlop.Check.Warning.DualKeyAccess

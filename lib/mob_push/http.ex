@@ -20,6 +20,9 @@ defmodule MobPush.HTTP do
 
   # * `pool_not_available` / `disconnected`: Finch had no connection and
   #   never sent the request.
+  # * `read_only`: the connection stopped accepting writes (after a GOAWAY,
+  #   or Mint `:closed_for_writing`) before the request was fully written,
+  #   so the server never got a complete request.
   # * `unprocessed`: the server's GOAWAY covered this stream, so it was
   #   sent but not processed (RFC 9113 §6.8).
   # * REFUSED_STREAM: the server reset the stream before any processing
@@ -27,6 +30,7 @@ defmodule MobPush.HTTP do
   @unprocessed_reasons [
     :pool_not_available,
     :disconnected,
+    :read_only,
     :unprocessed,
     {:server_closed_request, :refused_stream}
   ]

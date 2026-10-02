@@ -16,7 +16,7 @@ that's left to the application.
 - `lib/mob_push/apns.ex` — APNs adapter: ES256 JWT signing, HTTP/2 to Apple
 - `lib/mob_push/fcm.ex` — FCM adapter: RS256 service account JWT → OAuth2 token → FCM
 - `lib/mob_push/token_cache.ex` — ETS GenServer: caches APNs JWT + FCM OAuth2 token
-- `lib/mob_push/http.ex` — shared Req client; briefly retries never-sent HTTP/2 errors (MOB-318)
+- `lib/mob_push/http.ex` — shared Req client; briefly retries HTTP/2 errors the server did not process (MOB-318)
 - `lib/mob_push/application.ex` — starts Finch (HTTP/2 pools for Apple) + TokenCache
 - `lib/mix/tasks/mob_push.install.ex` — interactive onboarding task
 

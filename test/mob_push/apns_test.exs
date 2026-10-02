@@ -164,7 +164,7 @@ defmodule MobPush.APNSTest do
   end
 
   # Mirrors MobPush.APNS.build_aps/1 — kept in sync per the note in
-  # CLAUDE.md. As of MOB-84 title/body are optional (pure silent-push
+  # AGENTS.md. As of MOB-84 title/body are optional (pure silent-push
   # support), so the mirror does the same.
   defp build_aps(payload) when is_map(payload) do
     aps = alert_map_test(payload)

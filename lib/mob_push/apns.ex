@@ -70,9 +70,7 @@ defmodule MobPush.APNS do
         {"content-type", "application/json"}
       ]
 
-      req = Req.new(finch: MobPush.Finch, url: url, headers: headers, body: body)
-
-      case Req.post(req) do
+      case MobPush.HTTP.post(url: url, headers: headers, body: body) do
         {:ok, %{status: 200}} ->
           :ok
 

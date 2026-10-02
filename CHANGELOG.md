@@ -10,6 +10,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ### Fixed
 
+- **The first push after boot no longer fails with `pool_not_available`**
+  (MOB-318). Until its HTTP/2 connection to Apple is up, Finch 0.22/0.23
+  reject requests without sending them (`%Req.HTTPError{reason:
+  :pool_not_available}`; older Finch says `:disconnected`), and the POST
+  was not retried, so a wake sent right after boot was lost. APNs and FCM
+  requests now retry errors that guarantee the server did not process the
+  request: Finch never sent it (`pool_not_available`, `disconnected`), or
+  the server's GOAWAY or REFUSED_STREAM rejected it unprocessed
+  (`unprocessed`, `{:server_closed_request, :refused_stream}`). Backoff
+  is short, and no retry starts later than 1.5 s after the first attempt,
+  so a caller waits at most that plus one attempt. Timeouts, connections
+  closed mid-request and every HTTP response are still returned at once,
+  since the push may already have been delivered.
+
 - **APNs `apns-push-type` header now branches on payload shape** (MOB-84).
   The header was hardcoded to `"alert"`, so a truly silent push
   (`content_available: true` with no user-visible fields) was rejected

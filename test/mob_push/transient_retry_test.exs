@@ -90,7 +90,12 @@ defmodule MobPush.TransientRetryTest do
     end
 
     test "other HTTP/2 errors the server did not process are retried" do
-      for reason <- [:disconnected, :unprocessed, {:server_closed_request, :refused_stream}] do
+      for reason <- [
+            :disconnected,
+            :read_only,
+            :unprocessed,
+            {:server_closed_request, :refused_stream}
+          ] do
         script = stub([http2_error(reason), response(200)])
 
         assert :ok = APNS.send("devicetoken", %{title: "a", body: "b"})

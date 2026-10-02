@@ -1,4 +1,4 @@
-# AGENTS.md — orientation for AI agents working on mob_push
+# mob_push — Agent Instructions
 
 You're in **mob_push**, a **server-side** Elixir library for sending push notifications to Mob apps. Wraps APNs HTTP/2 (iOS) + FCM v1 (Android). Zero device code. **Zero mob dependency** — it can be used with any push token from any client, mob or otherwise.
 
@@ -30,6 +30,133 @@ Thin HTTP/2 client for Apple + Google's push endpoints. `MobPush.send(token, :io
 * `lib/mix/tasks/mob_push.setup.fcm.ex` — analogous for FCM service accounts.
 * `test/fixtures/push_contract.exs` — shared with mob_notify. Change here, change there.
 
+## Token cache behaviour
+
+- APNs JWTs: cached 50 minutes (Apple allows up to 1 hour)
+- FCM OAuth2 tokens: cached ~55 minutes (expire after 1 hour; 5-minute margin)
+- Cache key for APNs: `{:apns_jwt, key_id}`
+- Cache key for FCM: `{:fcm_token, client_email}`
+- On 401/403: caller evicts the cache key and returns `{:error, :auth_failed}`
+- Eviction is manual: `MobPush.TokenCache.evict(key)`
+
+## Error handling conventions
+
+- Adapters return `{:error, reason}` — never raise (except `send!/3`)
+- Config errors (missing key file, etc.) return `{:error, :missing_apns_key_config}`
+  rather than raising — this is intentional, keeps crashes out of the token cache GenServer
+- Unexpected HTTP status returns `{:error, {:unexpected_status, status, body}}`
+
+## Finch / HTTP/2
+
+APNs requires HTTP/2. `MobPush.Application` pre-configures Finch pools:
+```elixir
+"https://api.push.apple.com"         => [protocols: [:http2], count: 2, size: 10]
+"https://api.sandbox.push.apple.com" => [protocols: [:http2], count: 2, size: 10]
+```
+FCM uses HTTP/1.1 (Finch default). All HTTP goes through `MobPush.Finch`.
+
+## Config structure
+
+```elixir
+config :mob_push, :apns,
+  key_id:    "XXXXXXXXXX",          # 10-char Key ID
+  team_id:   "XXXXXXXXXX",          # 10-char Team ID
+  bundle_id: "com.example.myapp",
+  key_file:  "/path/to/AuthKey.p8", # OR key_pem: "..."
+  env:       :sandbox               # or :production
+
+config :mob_push, :fcm,
+  project_id:          "my-firebase-project",
+  service_account_key: "/path/to/sa.json"   # OR service_account_json: %{...}
+```
+
+## Payload options
+
+### iOS (APNs) — `build_aps/1` in `apns.ex`
+
+| Key | Type | Notes |
+|-----|------|-------|
+| `:title` | string | Required |
+| `:body` | string | Required |
+| `:subtitle` | string | Second line under title in the tray |
+| `:badge` | integer | App icon badge count; 0 to clear |
+| `:sound` | string | `"default"` or bundled filename (no extension) |
+| `:content_available` | boolean | Silent push — maps to `"content-available": 1` |
+| `:data` | map | Merged into the APNs root (outside `aps`); values preserved as-is |
+
+### Android (FCM) — `build_message/2` in `fcm.ex`
+
+| Key | Type | Notes |
+|-----|------|-------|
+| `:title` | string | Required — goes into `notification.title` |
+| `:body` | string | Required — goes into `notification.body` |
+| `:data` | map | Key-value pairs; keys and values coerced to strings. Always includes `mob_notification_json`. |
+| `:android` | map | Forwarded verbatim as FCM `AndroidConfig` (appearance, priority, channel, etc.) |
+
+## mob_notification_json — the delivery mechanism
+
+FCM sends two parallel payloads:
+1. `notification` object — OS uses this to display the system notification when the app is killed/backgrounded
+2. `data` object — always delivered to the app; includes `mob_notification_json`
+
+`mob_notification_json` is a JSON-encoded map of `{title, body, source: "push", data}`. It
+ensures the BEAM gets the notification payload regardless of which delivery path Android used:
+
+- **Killed → tapped**: `MainActivity.onCreate` reads it from `intent.extras`, stores it, delivers after BEAM boots
+- **Background → tapped**: `MainActivity.onNewIntent` reads it, calls `nativeDeliverNotification` directly to BEAM
+- **Foreground**: `MobFirebaseService.onMessageReceived` reads it from FCM data payload, delivers to BEAM
+
+All three paths deliver `{:notification, notif}` to the screen process.
+
+## Android notification appearance (`:android` key)
+
+The `:android` key passes through as FCM `AndroidConfig`. Useful fields:
+
+```elixir
+android: %{
+  "notification" => %{
+    "icon"       => "ic_notification",  # drawable resource name — must be white/transparent PNG
+    "color"      => "#FF6200EE",        # accent color (#RRGGBB or #AARRGGBB)
+    "sound"      => "default",          # or res/raw/ filename (no extension)
+    "channel_id" => "messages",         # required on Android 8+; create in MainActivity.onCreate
+    "image"      => "https://...",      # BigPictureStyle (HTTPS URL)
+    "tag"        => "thread-42"         # collapses: same tag replaces previous notification
+  },
+  "priority" => "high"   # "high" = wakes screen; "normal" = quiet
+}
+```
+
+Notification channels must be created by the Android app (Kotlin) before a notification
+using that `channel_id` arrives. Sending to a non-existent channel silently drops the
+notification on Android 8+.
+
+## iOS notification appearance
+
+iOS fields supported in `build_aps/1`:
+- `:subtitle` — second line in the tray
+- `:badge` — icon badge count
+- `:sound` — `"default"` or bundled `.aiff`/`.wav`/`.caf` filename
+
+Images on iOS require a Notification Service Extension (NSE) — an Xcode build target
+the library doesn't touch. Include an image URL in `:data` and have the NSE download
+and attach it.
+
+## The install task
+
+`mix mob_push.install` (plain Mix.Task, not Igniter — matches mob_dev style):
+- Interactively prompts for APNs and FCM credentials
+- Writes config stubs to `config/runtime.exs` with `System.get_env` wrappers
+- Offers "skip" for each platform (inserts placeholder values)
+- Explains where to get each credential as it prompts
+- Options: `--ios-only`, `--android-only`, `--skip-all`
+
+## Dependencies
+
+- `req ~> 0.5` — HTTP client (Finch-backed, HTTP/2 support for APNs)
+- `jose ~> 1.11` — JWT signing (ES256 for APNs, RS256 for FCM service account)
+- `jason ~> 1.4` — JSON encode/decode
+- `ex_doc` — docs only, dev runtime: false
+
 ## Cross-repo work
 
 **mob_notify:** the wire contract. Any change to the `{:push_token, ...}` shape, or the wake payload shape, must land in both repos' `test/fixtures/push_contract.exs` in the same session.
@@ -45,9 +172,18 @@ mix deps.get
 mix test
 ```
 
-All tests are pure unit tests — no network calls, no credentials. Bypass + real credentials would be needed for integration; not currently wired.
+All tests are pure unit tests — no network calls, no credentials needed. Tests live in `test/mob_push/`; every module has a corresponding test file. No integration tests yet — Bypass + real credentials would be needed; not currently wired.
 
-**When adding tests for APNs JWTs**, generate the EC key with `JOSE.JWK.generate_key({:ec, "P-256"})`. Do NOT use `:public_key.generate_key/1` — OTP-version quirks. Do NOT use `{:namedCurve, :prime256v1}` — use the OID tuple `{1, 2, 840, 10045, 3, 1, 7}`. The `apns_test.exs` has a private `build_aps/1` helper mirroring the module's; keep them in sync when adding payload fields.
+**When adding tests for APNs JWTs**, generate the EC key with:
+
+```elixir
+jwk = JOSE.JWK.generate_key({:ec, "P-256"})
+{_, pem} = JOSE.JWK.to_pem(jwk)
+```
+
+Do NOT use `:public_key.generate_key/1` — it has OTP-version quirks with EC keys. Do NOT use `{:namedCurve, :prime256v1}` — use the OID tuple `{1, 2, 840, 10045, 3, 1, 7}`.
+
+The test file for `apns.ex` (`apns_test.exs`) contains a private `build_aps/1` helper that mirrors the private function in the module. When you add new fields to `build_aps/1` in `apns.ex`, update the mirror in the test file too.
 
 ## The pre-empt-failure rules that matter here
 
@@ -57,13 +193,28 @@ All tests are pure unit tests — no network calls, no credentials. Bypass + rea
 4. **Silent detection in `build_message/2` is order-sensitive.** `content_available: true` PLUS the absence of title/body/subtitle/sound/badge switches FCM to data-only mode (MOB-96) and APNs to `push_type: background` (MOB-84). Adding a visible field flips the wire back to a normal notification — sometimes that's what a caller wants (hybrid visible+silent) and sometimes it's a bug. The current tests cover both; keep them passing.
 5. **APNs error strings map to atoms in `parse_error/1`** — keep it exhaustive. Apple has added new error codes over the years and a missing case falls through to `{:apns_error, "unknown"}` which is unhelpful.
 
-## Pre-commit + release
+## Pre-commit + pre-release checklist
+
+Before committing — and before bumping the version and publishing — run **all** of these in order and fix every issue. Do not ship with any failures or credo warnings:
 
 ```bash
-mix format
-mix credo --strict   # zero issues required, no exceptions
+mix format                         # apply Elixir formatting
+mix credo --strict                 # zero issues required — fix everything, no exceptions
 mix compile --warnings-as-errors
-mix test
+mix test                           # every test must pass
 ```
 
+## Release flow
+
 Same release trigger model as the rest of the mob ecosystem — `mix.exs` version bump on master triggers Hex publish via `.github/workflows/release.yml`. Do not bump versions without explicit permission. See `~/code/mob/RELEASE.md`.
+
+## Generating docs
+
+```bash
+mix docs
+```
+
+Docs are output to `doc/`. The main page is `README.md`. Module groups:
+- **API**: `MobPush`
+- **Internals**: `MobPush.APNS`, `MobPush.FCM`, `MobPush.TokenCache`
+- **Mix Tasks**: `Mix.Tasks.MobPush.Install`

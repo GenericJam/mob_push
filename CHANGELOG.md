@@ -6,6 +6,29 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ---
 
+## [Unreleased]
+
+### Security
+
+- **`mix mob_push.setup.fcm` sign-in now uses `state` and PKCE** (MOB-213).
+  The Google OAuth loopback flow sent no `state` and no PKCE challenge, and
+  its callback listener took the first authorization code that reached it.
+  Another local process or a web page that found the port could deliver a
+  code from a different Google account (the wizard would then set up FCM in
+  that account's Firebase project), and a code intercepted on its way to the
+  listener could be redeemed without proof that it came from this sign-in.
+  Each sign-in now generates a random `state` and an S256 PKCE
+  verifier, sends `state`, `code_challenge` and `code_challenge_method=S256`
+  to Google, refuses a callback whose `state` is missing or different
+  (compared in constant time) without exchanging its code, and sends the
+  `code_verifier` in the token exchange. The listener accepts one callback
+  and closes before the exchange, so a second callback is refused, and it
+  now listens on `127.0.0.1` only (it was bound to every interface), with
+  `http://127.0.0.1:<port>/callback` as the redirect URI. Google Desktop-app
+  OAuth clients accept any loopback port, so existing
+  `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` setups need no
+  change.
+
 ## [0.2.3] - 2026-10-15
 
 ### Fixed

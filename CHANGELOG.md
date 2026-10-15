@@ -6,6 +6,31 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Booting no longer connects to Apple when APNs isn't configured**
+  (MOB-317). `MobPush.Application` opened HTTP/2 pools to both
+  `api.push.apple.com` and `api.sandbox.push.apple.com` at every boot, so
+  every `mix test` and dev boot of a host app made four TLS connections to
+  Apple, and offline logged `Failed to connect to https://api.push.apple.com:443`
+  and retried for the life of the VM. Now APNs has its own Finch
+  (`MobPush.APNSFinch`) that connects at boot only to the host of the
+  `:apns` `env` configured then, and to none without `:apns` config. Its
+  other pools start on the first send to a host and are HTTP/2 too, so
+  `:apns` config set or changed after boot still works. FCM keeps
+  `MobPush.Finch`.
+
+  **Upgrading:** any `:apns` config counts, placeholders included, so a
+  `config/runtime.exs` that sets `:apns` in every env still connects to
+  that env's host on dev and test boots. That's what the README, `mix
+  mob_push.install` and `mix mob_push.setup.apns` wrote. The README and
+  the install task's skip option now set it only when `APNS_KEY_FILE` is
+  set; to stop the connections, wrap an existing `config :mob_push, :apns`
+  the same way (`if System.get_env("APNS_KEY_FILE") do … end`) or skip it
+  in test (`if config_env() != :test do … end`).
+
 ## [0.2.2] - 2026-10-02
 
 ### Fixed

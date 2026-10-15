@@ -22,12 +22,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
   `:apns` config set or changed after boot still works. FCM keeps
   `MobPush.Finch`.
 
-  **Upgrading:** any `:apns` config counts, placeholders included. The
-  config the README and `mix mob_push.install`'s skip option used to write
-  set `:apns` in every env, so its dev and test boots still connect to the
-  sandbox host. Both now write it only when `APNS_KEY_FILE` is set; to stop
-  the connections, wrap an existing `config :mob_push, :apns` in
-  `config/runtime.exs` the same way (`if System.get_env("APNS_KEY_FILE") do … end`).
+  **Upgrading:** any `:apns` config counts, placeholders included, so a
+  `config/runtime.exs` that sets `:apns` in every env still connects to
+  that env's host on dev and test boots. That's what the README, `mix
+  mob_push.install` and `mix mob_push.setup.apns` wrote. The README and
+  the install task's skip option now set it only when `APNS_KEY_FILE` is
+  set; to stop the connections, wrap an existing `config :mob_push, :apns`
+  the same way (`if System.get_env("APNS_KEY_FILE") do … end`) or skip it
+  in test (`if config_env() != :test do … end`).
 
 ## [0.2.2] - 2026-10-02
 

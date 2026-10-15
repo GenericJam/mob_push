@@ -244,7 +244,9 @@ defmodule Mix.Tasks.MobPush.Install do
 
     if apns_cfg == :skip do
       shell.info("""
-        iOS (APNs) — fill in config/runtime.exs when you have your credentials:
+        iOS (APNs) — when you have your credentials, set APNS_KEY_FILE,
+        APNS_KEY_ID, APNS_TEAM_ID and APNS_BUNDLE_ID (config/runtime.exs
+        configures APNs only when APNS_KEY_FILE is set):
           • Key ID + Team ID: #{@apns_docs_url}
           • .p8 auth key file: same page — create a key of type "APNs"
           • Bundle ID: Apple Developer portal → Identifiers

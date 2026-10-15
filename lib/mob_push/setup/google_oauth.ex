@@ -43,7 +43,7 @@ defmodule MobPush.Setup.GoogleOAuth do
   PKCE (S256) verifier. The loopback listener on `127.0.0.1` accepts exactly
   one callback: it must carry this attempt's `state` or the code is refused
   without being exchanged, and the listener closes before the exchange, so
-  a second callback cannot connect.
+  no second callback is ever read.
 
   Options: `:scopes` (required), `:timeout_ms`, and the effect seams
   `:open_browser` (`(url -> :ok)`) and `:http_post` (same contract as

@@ -140,6 +140,15 @@ defmodule MobPush.TransientRetryTest do
 
       assert attempts(script) == 1
     end
+
+    # MOB-317: MobPush.Finch has no HTTP/2 pools; only MobPush.APNSFinch
+    # speaks HTTP/2, which APNs requires.
+    test "APNs requests go through the APNs Finch" do
+      script = stub([response(200)])
+
+      assert :ok = APNS.send("devicetoken", %{title: "a", body: "b"})
+      assert [%{options: %{finch: MobPush.APNSFinch}}] = requests(script)
+    end
   end
 
   describe "FCM" do

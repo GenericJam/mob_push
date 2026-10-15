@@ -177,14 +177,17 @@ defmodule Mix.Tasks.MobPush.Install do
 
   defp apns_block(:skip) do
     """
-    # iOS push notifications (APNs)
+    # iOS push notifications (APNs), only when its env vars are set: with
+    # :apns configured, mob_push connects to Apple at boot (dev and test too).
     # Get credentials at: #{@apns_docs_url}
-    config :mob_push, :apns,
-      key_id:    System.get_env("APNS_KEY_ID",    "YOUR_KEY_ID"),
-      team_id:   System.get_env("APNS_TEAM_ID",   "YOUR_TEAM_ID"),
-      bundle_id: System.get_env("APNS_BUNDLE_ID", "com.example.yourapp"),
-      key_file:  System.get_env("APNS_KEY_FILE",  "/path/to/AuthKey_XXXXXXXXXX.p8"),
-      env:       if(config_env() == :prod, do: :production, else: :sandbox)
+    if System.get_env("APNS_KEY_FILE") do
+      config :mob_push, :apns,
+        key_id:    System.fetch_env!("APNS_KEY_ID"),
+        team_id:   System.fetch_env!("APNS_TEAM_ID"),
+        bundle_id: System.fetch_env!("APNS_BUNDLE_ID"),
+        key_file:  System.fetch_env!("APNS_KEY_FILE"),
+        env:       if(config_env() == :prod, do: :production, else: :sandbox)
+    end
     """
   end
 

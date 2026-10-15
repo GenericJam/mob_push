@@ -70,7 +70,7 @@ defmodule MobPush.APNS do
         {"content-type", "application/json"}
       ]
 
-      case MobPush.HTTP.post(url: url, headers: headers, body: body) do
+      case MobPush.HTTP.post(finch: MobPush.APNSFinch, url: url, headers: headers, body: body) do
         {:ok, %{status: 200}} ->
           :ok
 
@@ -225,7 +225,10 @@ defmodule MobPush.APNS do
 
   defp parse_error(_), do: "unknown"
 
-  defp base_url(cfg) do
+  # Also picks the one APNs pool `MobPush.Application` starts.
+  @doc false
+  @spec base_url(keyword()) :: String.t()
+  def base_url(cfg) do
     case cfg[:env] do
       :production -> @production_url
       _ -> @sandbox_url

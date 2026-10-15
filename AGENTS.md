@@ -24,7 +24,7 @@ Thin HTTP/2 client for Apple + Google's push endpoints. `MobPush.send(token, :io
 * `lib/mob_push/fcm.ex` — FCM adapter: RS256 JWT → Google OAuth2 access token → FCM HTTP v1. `build_message/2` handles both visible (with `notification` block) and silent (data-only) shapes.
 * `lib/mob_push/token_cache.ex` — ETS GenServer: caches the APNs JWT (~50 min) and FCM OAuth2 tokens (~55 min). Eviction is manual (`MobPush.TokenCache.evict/1`) on 401/403.
 * `lib/mob_push/http.ex` — the only place APNs/FCM make HTTP requests. Retries errors where the server did not process the request (`pool_not_available` / `disconnected`: never left the node; `read_only`: the connection stopped taking writes before the request was fully written; `unprocessed` / `{:server_closed_request, :refused_stream}`: GOAWAY or REFUSED_STREAM). No retry starts later than 1.5 s after the first attempt, so a caller waits at most that plus one attempt. Never retries anything Apple/Google may have processed, because a resend could deliver the push twice.
-* `lib/mob_push/application.ex` — starts Finch (pre-configured HTTP/2 pools for both Apple endpoints) + TokenCache.
+* `lib/mob_push/application.ex` — starts two Finch instances (`MobPush.Finch` for FCM, `MobPush.APNSFinch` for APNs; see below) + TokenCache.
 * `lib/mix/tasks/mob_push.install.ex` — interactive onboarding.
 * `lib/mix/tasks/mob_push.setup.apns.ex` — walks a user through creating an APNs Auth Key on Apple Developer Portal + drops the config into runtime.exs.
 * `lib/mix/tasks/mob_push.setup.fcm.ex` — analogous for FCM service accounts.
@@ -48,12 +48,21 @@ Thin HTTP/2 client for Apple + Google's push endpoints. `MobPush.send(token, :io
 
 ## Finch / HTTP/2
 
-APNs requires HTTP/2. `MobPush.Application` pre-configures Finch pools:
+APNs requires HTTP/2, so it has its own Finch, `MobPush.APNSFinch`, whose
+pools are all HTTP/2. FCM uses `MobPush.Finch` with Finch's HTTP/1.1 defaults.
+Every request goes through `MobPush.HTTP.post/1`.
+
+Finch connects a pool listed by host as soon as it starts, but starts its
+`:default` pool only on the first request to a host. So `MobPush.APNSFinch`
+lists only the host of the `:apns` env configured at boot, keeping the first
+push off a cold connection, and none without `:apns` config, so dev and test
+boots of a host app make no connections to Apple (MOB-317). The `:default`
+pool is HTTP/2 too, so `:apns` set or changed after boot still sends over
+HTTP/2:
 ```elixir
-"https://api.push.apple.com"         => [protocols: [:http2], count: 2, size: 10]
-"https://api.sandbox.push.apple.com" => [protocols: [:http2], count: 2, size: 10]
+%{MobPush.APNS.base_url(apns_config) => apns_pool, :default => apns_pool}
+# apns_pool = [protocols: [:http2], count: 2, size: 10]
 ```
-FCM uses HTTP/1.1 (Finch default). All HTTP goes through `MobPush.Finch`.
 
 ## Config structure
 
